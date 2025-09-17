@@ -33,7 +33,6 @@ def worker():
     return ConnectionWorker(
         address=HOST,
         port=PORT,
-        buffer="",
         parameter_queue=queue.Queue(),
         timeout=0.1,
         update_interval=0.001,

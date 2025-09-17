@@ -9,13 +9,13 @@ else:
 
 class ConnectionWorker:
 
-    def __init__(self, address, port, buffer, parameter_queue, timeout=0.1, update_interval=0.001, line_size=1024):
+    def __init__(self, address, port, parameter_queue, timeout=0.1, update_interval=0.01, line_size=1024):
         self.address = address
         self.port = port
         self.running = False
-        self.buffer = buffer
         self.parameter_queue = parameter_queue
         self.socket = None
+        self.buffer = ''
 
         self.timeout = timeout
         self.update_interval = update_interval
