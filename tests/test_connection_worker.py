@@ -3,7 +3,7 @@ import pytest
 import socket
 import threading
 import time
-import queue
+from multiprocessing import Queue
 
 from camera_control import ConnectionWorker
 
@@ -33,7 +33,7 @@ def worker():
     return ConnectionWorker(
         address=HOST,
         port=PORT,
-        parameter_queue=queue.Queue(),
+        parameter_queue=Queue(),
         timeout=0.1,
         update_interval=0.001,
         line_size=1024,

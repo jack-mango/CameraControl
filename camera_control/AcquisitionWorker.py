@@ -6,24 +6,26 @@ class AcquisitionWorker:
                 info_queue,
                 data_queue,
                 acquisition_flag,
+                teardown_flag,
                 shot_counter,
                 n_states,
                 n_shots,
-                update_interval=0.10):
+                timeout=0.01):
         
         self.camera_instance = camera_instance
         self.config_queue = config_queue
         self.info_queue = info_queue
         self.data_queue = data_queue
+        self.teardown_flag = teardown_flag
         self.acquisition_flag = acquisition_flag
         self.shot_counter = shot_counter
-        self.update_interval = update_interval
+        self.timeout = timeout
         self.n_states = n_states
         self.n_shots = n_shots
         self.curr_config = {}
     
     def run(self):
-        while True:
+        while not self.teardown_flag.is_set():
             # Put the current camera state onto the info queue
             self.info_queue.put(self.get_camera_state())
             # Check for and apply updates to config settings
@@ -31,11 +33,15 @@ class AcquisitionWorker:
                 new_config = self.get_latest_config()
                 self.update_config(new_config)
             # If acquisition flag is set (True), pull images and put them on the data queue
-            if self.get_acquisition_flag():
+            if self.get_acquisition_flag() and not self.acquisition_in_progress():
+                self.camera_instance.start_acquisition()
+            elif not self.get_acquisition_flag and self.acquisition_in_progress():
+                self.camera_instance.stop_acquisition()
+            elif self.get_acquisition_flag() and self.acquisition_in_progress() and self.images_available():
                 images = self.pull_images()
                 self.data_queue.put(images)
                 self.increment_shot_counter()
-                if self.get_shot_counter == self.n_shots:
+                if self.get_shot_counter() == self.n_shots:
                     self.set_acquisition_flag(False)
         return
     
@@ -47,6 +53,9 @@ class AcquisitionWorker:
     
     def get_acquisition_flag(self):
         return self.acquisition_flag.value
+    
+    def acquisition_in_progress(self):
+        return self.camera_instance.acquisition_in_progress()
     
     def set_acquisition_flag(self, flag):
         self.acquisition_flag.value = flag
@@ -102,6 +111,9 @@ class AcquisitionWorker:
         elif key == 'fan_mode':
             self.set_fan_mode(value)
             self.curr_config['fan_mode'] = value
+        elif key == 'acquisition_mode':
+            self.set_acquisition_mode(value)
+            self.curr_config['acquisition_mode'] = value
         elif key == 'roi':
             self.set_roi(value)
             self.curr_config['roi'] = value
@@ -109,7 +121,7 @@ class AcquisitionWorker:
             raise ValueError(f"Unknown config setting: {key}")
         return
     
-    def get_camera_state(self, full=False):
+    def get_camera_state(self, full=False): 
         temperature = self.camera_instance.get_temperature()
         shutter_mode = self.camera_instance.get_shutter()
         state = {
@@ -118,9 +130,16 @@ class AcquisitionWorker:
         }
         return state
     
+    def images_available(self):
+        images_available = False
+        try:
+            images_available = self.camera_instance.wait_for_frame(nframes=self.n_states, timeout=self.timeout)
+        except:
+            pass
+        return images_available
+    
     def pull_images(self):
-        self.camera_instance.wait_for_frame(nframe=self.n_states)
-        images = self.camera_instance.read_multiple_images(rng=(0, self.n_states-1))
+        images = self.camera_instance.read_multiple_images(rng=(0, self.n_states))
         return images
     
     def set_temperature(self, temp):
@@ -166,6 +185,9 @@ class AcquisitionWorker:
     def set_fan_mode(self, mode):
         self.camera_instance.set_fan_mode(mode)
         return
+    
+    def set_acquisition_mode(self, mode):
+        self.camera_instance.set_acquisition_mode(mode)
     
     def set_roi(self, roi):
         self.camera_instance.set_roi(roi['x_left'],
