@@ -91,12 +91,16 @@ class MainWindow(QMainWindow):
         if self.controller:
             self.controller.temperature_signal.connect(self.update_temperature)
             self.controller.camera_connection_signal.connect(self.update_camera_connection_indicator)
+            self.controller.camera_connection_signal.connect(self.acquisition_panel.update_camera_connection)
             self.controller.socket_connection_signal.connect(self.update_socket_connection_indicator)
             self.controller.new_data_signal.connect(self.on_new_image_data)
+            self.controller.shot_counter_signal.connect(self.acquisition_panel.update_shot_counter)
             
             # Set initial indicator states
             self.update_camera_connection_indicator(self.controller.is_camera_connected)
             self.update_socket_connection_indicator(self.controller.is_socket_connected)
+            # Set initial start button state based on camera connection
+            self.acquisition_panel.update_camera_connection(self.controller.is_camera_connected)
     
     def on_new_image_data(self, images, parameters):
         """Handle new image data from the camera

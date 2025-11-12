@@ -92,6 +92,7 @@ class Controller(QThread):
                         parameters = self.parameter_queue.get_nowait()
 
                         self.shot_counter += 1
+                        self.shot_counter_signal.emit(self.shot_counter)
                         
                         logger.info(f"Shot count: {self.shot_counter}")
 
@@ -122,6 +123,11 @@ class Controller(QThread):
         
         if not self.is_camera_connected:
             raise CameraError("No camera connected!")
+        
+        # Check if auto shots per parameter is enabled without socket connection
+        auto_shots_per_parameter = self.config.get('acquisition_config', {}).get('auto_shots_per_parameter', False)
+        if auto_shots_per_parameter and not self.is_socket_connected:
+            raise CameraError("Auto shots per parameter requires socket connection! Please connect socket or disable auto mode.")
         
         try:
             self.start_file_worker()
@@ -270,6 +276,7 @@ class Controller(QThread):
                 self.parameter_queue
             )
             success = self.connection_worker.start_connection()
+            self.is_socket_connected = success  # Update the attribute
             self.socket_connection_signal.emit(success)
             logger.info(f"Socket connected: {self.config['socket_config']['ip_address']}:{self.config['socket_config']['port']}")
             return success
@@ -293,6 +300,9 @@ class Controller(QThread):
 
     def set_camera_config(self, new_config):
         """Update camera configuration settings"""
+        if self.acquisition_in_progress():
+            raise CameraError("Cannot change camera config while acquisition is running")
+        
         old_config = self.get_camera_config()
         if old_config:
             changed_settings = {k: new_config[k] for k in new_config.keys() if new_config[k] != old_config[k]}
@@ -313,6 +323,9 @@ class Controller(QThread):
     
     def set_image_config(self, new_config):
         """Update image configuration settings"""
+        if self.acquisition_in_progress():
+            raise CameraError("Cannot change image config while acquisition is running")
+        
         old_config = self.get_image_config()
         if old_config:
             changed_settings = {k: new_config[k] for k in new_config.keys() if new_config[k] != old_config[k]}
@@ -376,7 +389,6 @@ class Controller(QThread):
             auto_shots_per_parameter = self.config['acquisition_config']['auto_shots_per_parameter']
             logger.info("Starting FileWorker")
             
-            print(self.config['acquisition_config'])
             self.file_worker = FileWorker(
                 self.file_path,
                 file_extension,
@@ -384,6 +396,8 @@ class Controller(QThread):
                 auto_shots_per_parameter
             )
             
+            # Connect shot counter signal to FileWorker
+            self.shot_counter_signal.connect(self.file_worker.on_shot_count_update)
             # Use QueuedConnection to ensure file saving happens in background FileWorker thread
             self.new_data_signal.connect(self.file_worker.on_new_data)
             

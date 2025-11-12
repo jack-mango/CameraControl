@@ -1,14 +1,11 @@
 """Acquisition settings dialog"""
 
-import logging
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
     QLineEdit, QCheckBox, QComboBox, QPushButton
 )
 from PyQt5.QtGui import QIntValidator
-
-logger = logging.getLogger(__name__)
-
 
 class AcquisitionSettingsDialog(QDialog):
     """Dialog for configuring acquisition settings"""
@@ -25,13 +22,9 @@ class AcquisitionSettingsDialog(QDialog):
         form_layout = QFormLayout()
         
         # Frames per shot
-        frames_layout = QHBoxLayout()
         self.frames_per_shot_edit = QLineEdit("10")
         self.frames_per_shot_edit.setValidator(QIntValidator(1, 10))
-        self.auto_frames_per_shot_checkbox = QCheckBox("Auto")
-        frames_layout.addWidget(self.frames_per_shot_edit)
-        frames_layout.addWidget(self.auto_frames_per_shot_checkbox)
-        form_layout.addRow("Frames per Shot:", frames_layout)
+        form_layout.addRow("Frames per Shot:", self.frames_per_shot_edit)
 
         shots_per_parameter_layout = QHBoxLayout()
         self.shots_per_parameter_edit = QLineEdit("1")
@@ -69,29 +62,51 @@ class AcquisitionSettingsDialog(QDialog):
         
         # Connect checkbox signals to enable/disable text boxes
         self.max_shots_enabled_checkbox.toggled.connect(self.on_max_shots_toggled)
-        self.auto_frames_per_shot_checkbox.toggled.connect(self.on_auto_frames_toggled)
         
         # Set initial states
         self.on_max_shots_toggled(self.max_shots_enabled_checkbox.isChecked())
-        self.on_auto_frames_toggled(self.auto_frames_per_shot_checkbox.isChecked())
+        
+        # Connect to socket connection signal for dynamic updates
+        if self.controller:
+            self.controller.socket_connection_signal.connect(self.on_socket_connection_changed)
+            # Set initial state based on current socket connection
+            self.on_socket_connection_changed(self.controller.is_socket_connected)
         
         # Buttons
         button_layout = QHBoxLayout()
-        apply_btn = QPushButton("Apply")
-        apply_btn.clicked.connect(self.apply_settings)
+        self.apply_btn = QPushButton("Apply")
+        self.apply_btn.clicked.connect(self.apply_settings)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(apply_btn)
+        button_layout.addWidget(self.apply_btn)
         button_layout.addWidget(cancel_btn)
         main_layout.addLayout(button_layout)
+        
+        # Disable apply button if acquisition is in progress
+        if self.controller:
+            is_acquiring = self.controller.acquisition_in_progress()
+            self.apply_btn.setEnabled(not is_acquiring)
+            if is_acquiring:
+                self.apply_btn.setToolTip("Cannot change settings during acquisition")
     
     def on_max_shots_toggled(self, checked):
         """Enable/disable max shots text box based on checkbox state"""
         self.max_shots_edit.setEnabled(checked)
     
-    def on_auto_frames_toggled(self, checked):
-        """Enable/disable frames per shot text box based on checkbox state"""
-        self.frames_per_shot_edit.setEnabled(not checked)
+    def on_socket_connection_changed(self, is_connected):
+        """
+        Update auto shots per parameter checkbox based on socket connection status.
+        
+        Args:
+            is_connected: True if socket is connected, False otherwise
+        """
+        self.shots_per_parameter_auto.setEnabled(is_connected)
+        if is_connected:
+            self.shots_per_parameter_auto.setToolTip("")
+        else:
+            # Uncheck and disable if socket disconnects
+            self.shots_per_parameter_auto.setChecked(False)
+            self.shots_per_parameter_auto.setToolTip("Socket must be connected to use auto mode")
     
     def apply_settings(self):
         """Apply the acquisition settings to the controller"""
@@ -106,10 +121,9 @@ class AcquisitionSettingsDialog(QDialog):
             # Apply auto frames per shot
             acquisition_config['auto_shots_per_parameter'] = self.shots_per_parameter_auto.isChecked()
             
-            # Apply frames per shot (only if not auto)
-            if not self.auto_frames_per_shot_checkbox.isChecked():
-                frames_per_shot = int(self.frames_per_shot_edit.text())
-                acquisition_config['frames_per_shot'] = frames_per_shot
+            # Apply frames per shot
+            frames_per_shot = int(self.frames_per_shot_edit.text())
+            acquisition_config['frames_per_shot'] = frames_per_shot
 
             # Apply shots per parameter
             acquisition_config['shots_per_parameter'] = int(self.shots_per_parameter_edit.text())

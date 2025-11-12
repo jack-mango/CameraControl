@@ -35,6 +35,13 @@ class SocketConfigDialog(QDialog):
         # Connect/Disconnect button
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.clicked.connect(self.toggle_socket_connection)
+        
+        # Disable connect button if acquisition is in progress
+        is_acquiring = self.controller.acquisition_in_progress()
+        if is_acquiring:
+            self.connect_btn.setEnabled(False)
+            self.connect_btn.setToolTip("Cannot change socket connection during acquisition")
+        
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.reject)
         main_layout.addWidget(self.connect_btn)

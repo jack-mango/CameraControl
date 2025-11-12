@@ -71,9 +71,17 @@ class CameraConfigDialog(QDialog):
         if controller.get_is_camera_connected():
             self.make_sensor_settings_tab()
             self.make_image_settings_tab()
-            set_btn = QPushButton("Apply")
-            set_btn.clicked.connect(self.apply_settings)
-            self.main_layout.addWidget(set_btn)
+            self.apply_btn = QPushButton("Apply")
+            self.apply_btn.clicked.connect(self.apply_settings)
+            self.main_layout.addWidget(self.apply_btn)
+            
+            # Disable apply button if acquisition is in progress
+            is_acquiring = self.controller.acquisition_in_progress()
+            self.apply_btn.setEnabled(not is_acquiring)
+            if is_acquiring:
+                self.apply_btn.setToolTip("Cannot change settings during acquisition")
+        else:
+            self.apply_btn = None
         
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.reject)
@@ -243,9 +251,15 @@ class CameraConfigDialog(QDialog):
                 btn.setText("Disconnect")
                 self.make_sensor_settings_tab()
                 self.make_image_settings_tab()
-                set_btn = QPushButton("Apply")
-                set_btn.clicked.connect(self.apply_settings)
-                self.main_layout.insertWidget(self.main_layout.count() - 1, set_btn)
+                self.apply_btn = QPushButton("Apply")
+                self.apply_btn.clicked.connect(self.apply_settings)
+                self.main_layout.insertWidget(self.main_layout.count() - 1, self.apply_btn)
+                
+                # Disable apply button if acquisition is in progress
+                is_acquiring = self.controller.acquisition_in_progress()
+                self.apply_btn.setEnabled(not is_acquiring)
+                if is_acquiring:
+                    self.apply_btn.setToolTip("Cannot change settings during acquisition")
                 
                 # Disable other connect buttons
                 for r in range(self.camera_table.rowCount()):

@@ -1,6 +1,12 @@
 /* Main Window */
 QMainWindow {
     background-color: #1e1e1e;
+    color: #cccccc;  /* text_light for all text by default */
+}
+
+/* Global text color */
+* {
+    color: #cccccc;  /* text_light */
 }
 
 /* Dialog Windows */
@@ -28,7 +34,7 @@ QDialog QTableWidget::item {
 
 QDialog QTableWidget::item:selected {
     background-color: #007acc;
-    color: #ffffff;
+    color: #cccccc;  /* text_light */
 }
 
 QDialog QHeaderView::section {
@@ -104,7 +110,7 @@ ImagePlot QLabel {
 /* All Push Buttons - bg_elevated */
 QPushButton {
     background-color: #0e639c;
-    color: #ffffff;
+    color: #cccccc;  /* text_light */
     border: 1px solid #3e3e42;
     padding: 6px 12px;
     border-radius: 3px;
@@ -173,7 +179,7 @@ QCheckBox {
 #acquisition-panel-title {
     font-size: 16px;
     font-weight: bold;
-    color: #ffffff;
+    color: #cccccc;  /* text_light */
     padding: 4px 0px;
     background-color: transparent;
 }
@@ -197,7 +203,7 @@ QCheckBox {
 }
 
 #acquisition-status-value {
-    color: #ffffff;
+    color: #cccccc;  /* text_light */
     font-weight: bold;
     background-color: #1e1e1e;  /* bg_dark */
     border: 1px solid #3e3e42;  /* border color */
@@ -208,7 +214,7 @@ QCheckBox {
 
 #acquisition-control-button {
     background-color: #0e639c;
-    color: #ffffff;
+    color: #cccccc;  /* text_light */
     border: 1px solid #007acc;
     padding: 8px 16px;
     border-radius: 3px;
@@ -239,7 +245,7 @@ QCheckBox {
 #logging-panel-title {
     font-size: 14px;
     font-weight: bold;
-    color: #ffffff;
+    color: #cccccc;  /* text_light */
     padding: 4px 0px;
     background-color: transparent;
 }

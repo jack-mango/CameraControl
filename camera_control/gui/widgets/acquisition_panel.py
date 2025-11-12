@@ -1,6 +1,5 @@
 """Acquisition control panel widget"""
 
-import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLabel, QPushButton
 )
@@ -8,16 +7,6 @@ from PyQt5.QtCore import Qt
 
 from ..constants import DEFAULT_PADDING
 from ..dialogs.acquisition_settings import AcquisitionSettingsDialog
-
-logger = logging.getLogger(__name__)
-
-# TODO: Make the acquisition panel functional
-
-# TODO: Change acquisition panel text color to all be text_light
-
-# TODO: Disable settings button (or at least the apply button in the settings) when acquisition is in progress
-
-# TODO: Disable the start button unless 1. socket is connected and 2. camera is connected.
 
 
 
@@ -57,11 +46,12 @@ class AcquisitionPanel(QWidget):
         self.rep_number_label.setAlignment(Qt.AlignCenter)
         status_layout.addRow("Current Rep Number:", self.rep_number_label)
         
-        self.scan_variable_label = QLabel("N/A")
-        self.scan_variable_label.setObjectName("acquisition-status-value")
-        self.scan_variable_label.setFrameStyle(QLabel.Box | QLabel.Plain)
-        self.scan_variable_label.setAlignment(Qt.AlignCenter)
-        status_layout.addRow("Current Scan Variable:", self.scan_variable_label)
+        # NOT IMPLEMENTED YET
+        # self.scan_variable_label = QLabel("N/A")
+        # self.scan_variable_label.setObjectName("acquisition-status-value")
+        # self.scan_variable_label.setFrameStyle(QLabel.Box | QLabel.Plain)
+        # self.scan_variable_label.setAlignment(Qt.AlignCenter)
+        # status_layout.addRow("Current Scan Variable:", self.scan_variable_label)
         
         self.total_shots_label = QLabel("0")
         self.total_shots_label.setObjectName("acquisition-status-value")
@@ -78,6 +68,7 @@ class AcquisitionPanel(QWidget):
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("acquisition-control-button")
         self.start_btn.clicked.connect(self.on_start_clicked)
+        self.start_btn.setEnabled(False)  # Disabled until camera is connected
         
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("acquisition-control-button")
@@ -122,9 +113,26 @@ class AcquisitionPanel(QWidget):
     def on_stop_clicked(self):
         """Handle stop button click"""
         self.controller.stop_acquisition()
-        # Update button states
-        self.start_btn.setEnabled(True)
+        # Update button states - re-enable start only if camera is connected
+        if self.controller.is_camera_connected:
+            self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+    
+    def update_camera_connection(self, is_connected):
+        """
+        Update the start button state based on camera connection status.
+        
+        Args:
+            is_connected: True if camera is connected, False otherwise
+        """
+        # Only enable start button if camera is connected and acquisition is not in progress
+        if is_connected:
+            # Enable start button (unless stop button is enabled, meaning acquisition is running)
+            if not self.stop_btn.isEnabled():
+                self.start_btn.setEnabled(True)
+        else:
+            # Disable start button when camera disconnects
+            self.start_btn.setEnabled(False)
     
     def update_status(self, shot_in_rep=None, rep_number=None, scan_variable=None, total_shots=None):
         """Update the status display"""
@@ -136,3 +144,12 @@ class AcquisitionPanel(QWidget):
             self.scan_variable_label.setText(str(scan_variable))
         if total_shots is not None:
             self.total_shots_label.setText(str(total_shots))
+    
+    def update_shot_counter(self, shot_count):
+        """
+        Update the total shots counter from Controller's shot_counter_signal.
+        
+        Args:
+            shot_count: Current total shot count
+        """
+        self.total_shots_label.setText(str(shot_count))
