@@ -1,0 +1,271 @@
+/* Main Window */
+QMainWindow {
+    background-color: #1e1e1e;
+}
+
+/* Dialog Windows */
+QDialog {
+    background-color: #1e1e1e;
+    color: #cccccc;
+}
+
+QDialog QLabel {
+    color: #cccccc;
+    background-color: transparent;
+}
+
+QDialog QTableWidget {
+    background-color: #1e1e1e;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+    gridline-color: #3e3e42;
+}
+
+QDialog QTableWidget::item {
+    background-color: #252526;
+    color: #cccccc;
+}
+
+QDialog QTableWidget::item:selected {
+    background-color: #007acc;
+    color: #ffffff;
+}
+
+QDialog QHeaderView::section {
+    background-color: #2d2d30;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+    padding: 4px;
+}
+
+QDialog QTabWidget::pane {
+    border: 1px solid #3e3e42;
+    background-color: #1e1e1e;
+}
+
+QDialog QTabBar::tab {
+    background-color: #2d2d30;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+    padding: 6px 12px;
+    margin-right: 2px;
+}
+
+QDialog QTabBar::tab:selected {
+    background-color: #1e1e1e;
+    border-bottom: 2px solid #007acc;
+}
+
+QDialog QTabBar::tab:hover {
+    background-color: #333333;
+}
+
+LiveImageViewWidget {
+    border: 2px solid #3e3e42;
+    border-radius: 5px;
+    background-color: #1e1e1e;
+}
+
+/* Image Plot Widget */
+ImagePlot {
+    background-color: #252526;
+    border: 1px solid #3e3e42;
+    border-radius: 5px;
+}
+
+/* Connection Indicator Button */
+ConnectionIndicatorButton {
+    background-color: #252526;
+    border: 1px solid #3e3e42;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+ConnectionIndicatorButton:hover {
+    background-color: #333333;
+    border-radius: 4px;
+}
+
+ConnectionIndicatorButton:pressed {
+    background-color: #1e1e1e;
+}
+
+/* Settings Panel Widgets - scoped to settings panel only */
+ImagePlot QWidget {
+    background-color: transparent;
+}
+
+ImagePlot QLabel {
+    color: #cccccc;
+    background-color: transparent;
+    border: none;
+}
+
+/* All Push Buttons - bg_elevated */
+QPushButton {
+    background-color: #0e639c;
+    color: #ffffff;
+    border: 1px solid #3e3e42;
+    padding: 6px 12px;
+    border-radius: 3px;
+}
+
+QPushButton:hover {
+    background-color: #1177bb;
+}
+
+QPushButton:pressed {
+    background-color: #005a9e;
+}
+
+/* Plot Settings Button (⋯ button) - transparent with subtle effects */
+#plot-settings-button {
+    background-color: transparent;
+    color: #cccccc;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#plot-settings-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid #3e3e42;
+}
+
+#plot-settings-button:pressed {
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid #3e3e42;
+}
+
+QComboBox, QLineEdit {
+    background-color: #3c3c3c;
+    border: 1px solid #3e3e42;
+    color: #cccccc;
+    padding: 4px;
+    border-radius: 3px;
+}
+
+QComboBox:hover, QLineEdit:hover {
+    border: 1px solid #007acc;
+}
+
+QCheckBox {
+    color: #cccccc;
+    background-color: transparent;
+}
+
+#live-image-view-title {
+    font-size: 20px;  /* ← Adjust this value */
+    font-weight: bold;
+    color: #cccccc;
+    padding: 4px 0px;
+    background-color: transparent;
+}
+
+/* Acquisition Panel */
+#acquisition-panel {
+    border: 2px solid #3e3e42;
+    border-radius: 5px;
+    background-color: #2d2d30;
+}
+
+#acquisition-panel-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+    padding: 4px 0px;
+    background-color: transparent;
+}
+
+#acquisition-settings-button {
+    background-color: #252526;  /* ← Changed from transparent to bg_elevated */
+    color: #cccccc;
+    border: 1px solid #3e3e42;  /* ← Changed from transparent to border color */
+    border-radius: 4px;
+    font-size: 16px;  /* ← Increased from 14px */
+    font-weight: bold;
+}
+
+#acquisition-settings-button:hover {
+    background-color: #333333;  /* ← Changed to hover_bg */
+    border: 1px solid #007acc;  /* ← Accent color on hover */
+}
+
+#acquisition-settings-button:pressed {
+    background-color: #1e1e1e;  /* ← bg_dark when pressed */
+}
+
+#acquisition-status-value {
+    color: #ffffff;
+    font-weight: bold;
+    background-color: #1e1e1e;  /* bg_dark */
+    border: 1px solid #3e3e42;  /* border color */
+    border-radius: 3px;
+    padding: 4px 8px;
+    min-width: 60px;
+}
+
+#acquisition-control-button {
+    background-color: #0e639c;
+    color: #ffffff;
+    border: 1px solid #007acc;
+    padding: 8px 16px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+#acquisition-control-button:hover {
+    background-color: #1177bb;
+}
+
+#acquisition-control-button:pressed {
+    background-color: #005a9e;
+}
+
+#acquisition-control-button:disabled {
+    background-color: #252526;
+    color: #6e7681;
+    border: 1px solid #3e3e42;
+}
+
+/* Logging Panel */
+#logging-panel {
+    border: 2px solid #3e3e42;
+    border-radius: 5px;
+    background-color: #2d2d30;
+}
+
+#logging-panel-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #ffffff;
+    padding: 4px 0px;
+    background-color: transparent;
+}
+
+#log-display {
+    background-color: #1e1e1e;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+    border-radius: 3px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 11px;
+    padding: 4px;
+}
+
+#log-clear-button {
+    background-color: #252526;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+#log-clear-button:hover {
+    background-color: #333333;
+}
+
+#log-clear-button:pressed {
+    background-color: #1e1e1e;
+}

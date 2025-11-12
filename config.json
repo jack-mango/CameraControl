@@ -1,0 +1,41 @@
+{
+    "data_path": ".temp",
+    "file_format": ".mat",
+    "socket_config": {
+        "ip_address": "192.168.1.56",
+        "port": "5009"
+    },
+    "camera_config": {
+        "model": "DU897_BVF",
+        "serial_number": "14816",
+        "idx": "0",
+        "camera_specific_config": {
+            "Trigger mode": "External",
+            "Exposure time (ms)": "10",
+            "EM gain": "1",
+            "High EM gain": false,
+            "Amplifier": "Electron Multiplying",
+            "Vertical shift speed (us)": "1.70",
+            "Horizontal shift speed (MHz)": "17",
+            "Preamp gain": "3.0",
+            "Shutter mode": "Open",
+            "Temperature (C)": "-20"
+        }
+    },
+    "image_config": {
+        "X Origin": "0",
+        "Y Origin": "0",
+        "X Width": "500",
+        "Y Height": "500",
+        "X binning": "1",
+        "Y binning": "1"
+    },
+    "acquisition_config": {
+        "file_format": ".mat",
+        "auto_shots_per_parameter": false,
+        "frames_per_shot": 2,
+        "shots_per_parameter": 10,
+        "max_shots": 100
+    }
+    
+}
