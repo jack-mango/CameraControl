@@ -21,24 +21,36 @@ class AcquisitionSettingsDialog(QDialog):
         # Form layout for settings
         form_layout = QFormLayout()
         
+        # Get acquisition config from controller to populate default values
+        acquisition_config = None
+        if self.controller:
+            acquisition_config = self.controller.get_acquisition_config()
+        
         # Frames per shot
-        self.frames_per_shot_edit = QLineEdit("10")
+        frames_per_shot_default = str(acquisition_config.get('frames_per_shot', 10)) if acquisition_config else "10"
+        self.frames_per_shot_edit = QLineEdit(frames_per_shot_default)
         self.frames_per_shot_edit.setValidator(QIntValidator(1, 10))
         form_layout.addRow("Frames per Shot:", self.frames_per_shot_edit)
 
         shots_per_parameter_layout = QHBoxLayout()
-        self.shots_per_parameter_edit = QLineEdit("1")
+        shots_per_parameter_default = str(acquisition_config.get('shots_per_parameter', 1)) if acquisition_config else "1"
+        self.shots_per_parameter_edit = QLineEdit(shots_per_parameter_default)
         self.shots_per_parameter_auto = QCheckBox("Auto")
+        auto_shots_default = acquisition_config.get('auto_shots_per_parameter', False) if acquisition_config else False
+        self.shots_per_parameter_auto.setChecked(auto_shots_default)
         shots_per_parameter_layout.addWidget(self.shots_per_parameter_edit)
         shots_per_parameter_layout.addWidget(self.shots_per_parameter_auto)
         form_layout.addRow("Shots per Parameter:", shots_per_parameter_layout)
 
         # Maximum shots
         max_shots_layout = QHBoxLayout()
-        self.max_shots_edit = QLineEdit("100")
+        max_shots_default = acquisition_config.get('max_shots', 100) if acquisition_config else 100
+        max_shots_enabled = max_shots_default is not None
+        max_shots_value = str(max_shots_default) if max_shots_enabled else "100"
+        self.max_shots_edit = QLineEdit(max_shots_value)
         self.max_shots_edit.setValidator(QIntValidator(1, 100000))
         self.max_shots_enabled_checkbox = QCheckBox("Enable Limit")
-        self.max_shots_enabled_checkbox.setChecked(True)
+        self.max_shots_enabled_checkbox.setChecked(max_shots_enabled)
         max_shots_layout.addWidget(self.max_shots_edit)
         max_shots_layout.addWidget(self.max_shots_enabled_checkbox)
         form_layout.addRow("Maximum Shots:", max_shots_layout)
@@ -48,12 +60,12 @@ class AcquisitionSettingsDialog(QDialog):
         self.file_type_combo.setMinimumWidth(150)
         self.file_type_combo.addItems(['.hdf5', '.npz', '.mat'])
         
-        # Set current format from controller
-        if self.controller:
-            current_format = self.controller.get_file_format()
+        # Set current format from controller config
+        if acquisition_config:
+            current_format = acquisition_config.get('file_format', '.mat')
             self.file_type_combo.setCurrentText(current_format)
         else:
-            self.file_type_combo.setCurrentText('.hdf5')  # Default
+            self.file_type_combo.setCurrentText('.mat')  # Default
             
         form_layout.addRow("File Save Type:", self.file_type_combo)
         

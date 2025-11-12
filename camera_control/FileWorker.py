@@ -13,8 +13,6 @@ if __name__ == "__main__":
 
 logger = logging.getLogger(__name__)
 
-# TODO: Sometimes the fileworker gets stuck saving the last shot or two left in the buffer if acquisition is halted early. Correct this!
-
 class FileWorker(QThread):
     """QThread worker for saving image data to files"""
     
@@ -108,8 +106,9 @@ class FileWorker(QThread):
             self._shot_count += 1
             curr_shot_number = self._shot_count % self.shots_per_parameter
             
-
-        if curr_shot_number < prev_shot_number:
+        if self.parameter_buffer.empty():
+            self.parameter_buffer.put(parameters)
+        elif curr_shot_number < prev_shot_number:
             self.parameter_buffer.put(parameters)
             self.shots_per_parameter = prev_shot_number + 1
             self._save_buffered_data()
@@ -126,6 +125,7 @@ class FileWorker(QThread):
             # Pull only shots_per_parameter items from the queues
             images_list = []
             items_to_pull = min(self.shots_per_parameter, self.image_buffer.qsize())
+
             
             for _ in range(items_to_pull):
                 images_list.append(self.image_buffer.get())

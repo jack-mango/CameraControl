@@ -36,6 +36,12 @@ class SocketConfigDialog(QDialog):
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.clicked.connect(self.toggle_socket_connection)
         
+        # Check if socket is already connected and update button state
+        if self.controller.is_socket_connected:
+            self.connect_btn.setText("Disconnect")
+            self.ip_address_edit.setEnabled(False)
+            self.port_edit.setEnabled(False)
+        
         # Disable connect button if acquisition is in progress
         is_acquiring = self.controller.acquisition_in_progress()
         if is_acquiring:

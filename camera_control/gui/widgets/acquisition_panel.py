@@ -16,6 +16,9 @@ class AcquisitionPanel(QWidget):
     def __init__(self, controller, parent=None):
         super().__init__(parent)
         self.controller = controller
+        self.shot_count = 0
+        self.rep_count = 0
+        self.tot_shots = 0
 
         self.setObjectName("acquisition-panel")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -134,17 +137,6 @@ class AcquisitionPanel(QWidget):
             # Disable start button when camera disconnects
             self.start_btn.setEnabled(False)
     
-    def update_status(self, shot_in_rep=None, rep_number=None, scan_variable=None, total_shots=None):
-        """Update the status display"""
-        if shot_in_rep is not None:
-            self.shot_in_rep_label.setText(str(shot_in_rep))
-        if rep_number is not None:
-            self.rep_number_label.setText(str(rep_number))
-        if scan_variable is not None:
-            self.scan_variable_label.setText(str(scan_variable))
-        if total_shots is not None:
-            self.total_shots_label.setText(str(total_shots))
-    
     def update_shot_counter(self, shot_count):
         """
         Update the total shots counter from Controller's shot_counter_signal.
@@ -152,4 +144,11 @@ class AcquisitionPanel(QWidget):
         Args:
             shot_count: Current total shot count
         """
+        prev_shot_count = self.shot_count
+        self.shot_count = shot_count
         self.total_shots_label.setText(str(shot_count))
+        self.tot_shots += 1
+        self.total_shots_label.setText(str(self.tot_shots))
+        if prev_shot_count < shot_count:
+            self.rep_count += 1
+            self.rep_number_label.setText(str(self.rep_count))

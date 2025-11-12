@@ -13,16 +13,10 @@ logging.basicConfig(level=logging.INFO)
 
 # TODO: Add config saving/loading
 
-# TODO: Add run loop
-
-# TODO: Add signal to notify GUI of new images
-
 # TODO: Integrate file worker. Add config for it. Allow it to save using multiple image formats.
 
 # TODO: If sensor setting option isn't available just set it to default. Also give error message if config
 # gives incorrect config option (like vss not available) and pick some default value.
-
-# TODO: Should add some lock to make it impossible to read from queues if being used in run?
 
 class Controller(QThread):
 
@@ -35,7 +29,6 @@ class Controller(QThread):
     def __init__(self, config):
         super().__init__()
 
-        self.file_path = config['data_path']
         self.config = config
         self.camera_status_queue = multiprocessing.Queue()
         self.config_queue = multiprocessing.Queue()
@@ -349,7 +342,7 @@ class Controller(QThread):
     
     def get_file_format(self):
         """Get the current file save format"""
-        return self.config.get('file_format')
+        return self.config['acquisition_config'].get('file_format')
     
     def set_file_format(self, file_extension):
         """Set the file save format
@@ -361,7 +354,7 @@ class Controller(QThread):
         if file_extension not in valid_formats:
             raise ValueError(f"Invalid format: {file_extension}. Valid formats: {valid_formats}")
         
-        self.config['file_format'] = file_extension
+        self.config['acquisition_config']['file_format'] = file_extension
         
         logger.info(f"File format set to: {file_extension}")
         return True
@@ -384,20 +377,19 @@ class Controller(QThread):
     def start_file_worker(self):
         """Start the FileWorker thread for saving images"""
         try:
+            data_path = self.config['acquisition_config']['data_path']
             file_extension = self.config['acquisition_config']['file_format']
             shots_per_parameter = self.config['acquisition_config']['shots_per_parameter']
             auto_shots_per_parameter = self.config['acquisition_config']['auto_shots_per_parameter']
             logger.info("Starting FileWorker")
             
             self.file_worker = FileWorker(
-                self.file_path,
+                data_path,
                 file_extension,
                 shots_per_parameter,
                 auto_shots_per_parameter
             )
             
-            # Connect shot counter signal to FileWorker
-            self.shot_counter_signal.connect(self.file_worker.on_shot_count_update)
             # Use QueuedConnection to ensure file saving happens in background FileWorker thread
             self.new_data_signal.connect(self.file_worker.on_new_data)
             
@@ -535,7 +527,8 @@ class Controller(QThread):
         preamp_gain = list(dict.fromkeys([f"{mode[-1]:.1f}" for mode in all_oamp_modes]))
 
         settings =  {
-            "Trigger mode": {"Internal": "int", "External": "ext", "External exposure": "ext_exp"},
+            # TODO: Add support back in for internal triggering; add "Internal" : "int" below and proceed with implementation.
+            "Trigger mode": {"External": "ext", "External exposure": "ext_exp"},
             "Exposure time (ms)": 1.0,
             "EM gain": 1,
             "High EM gain": True,
