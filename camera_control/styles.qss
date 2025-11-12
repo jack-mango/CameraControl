@@ -124,6 +124,12 @@ QPushButton:pressed {
     background-color: #005a9e;
 }
 
+QPushButton:disabled {
+    background-color: #3e3e42;
+    color: #666666;
+    border: 1px solid #2d2d30;
+}
+
 /* Plot Settings Button (⋯ button) - transparent with subtle effects */
 #plot-settings-button {
     background-color: transparent;

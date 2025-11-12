@@ -29,6 +29,7 @@ class MainWindow(QMainWindow):
         self.controller = controller
 
         self.setWindowTitle("Camera Control")
+        # Set initial size, but allow it to be resized
         self.resize(1600, 900)
 
         # Create central widget with layout
@@ -41,8 +42,8 @@ class MainWindow(QMainWindow):
         main_content_layout = QHBoxLayout()
         main_content_layout.setSpacing(DEFAULT_PADDING)
         
-        # Create plot widget
-        self.live_image_view_widget = LiveImageViewWidget(1200, 500)
+        # Create plot widget with initial grid size
+        self.live_image_view_widget = LiveImageViewWidget(n_rows=1, n_cols=3)
         main_content_layout.addWidget(self.live_image_view_widget)
         
         # Create acquisition panel

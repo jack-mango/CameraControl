@@ -1,7 +1,7 @@
 {
     "socket_config": {
         "ip_address": "192.168.1.56",
-        "port": "5009"
+        "port": 5009
     },
     "camera_config": {
         "model": "DU897_BVF",
@@ -29,12 +29,11 @@
         "Y binning": "1"
     },
     "acquisition_config": {
-        "data_path": ".temp",
         "file_format": ".mat",
-        "auto_shots_per_parameter": true,
+        "data_path": ".temp",
+        "auto_shots_per_parameter": false,
         "frames_per_shot": 2,
         "shots_per_parameter": 10,
         "max_shots": 100
     }
-    
 }

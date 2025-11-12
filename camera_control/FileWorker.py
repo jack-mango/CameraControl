@@ -97,20 +97,17 @@ class FileWorker(QThread):
 
         if self.auto_shots_per_parameter:
             curr_shot_number = parameters.pop('AAAreps')
+            self.shots_per_parameter = parameters['n_reps']
             prev_shot_number = self._shot_count
             self._shot_count = curr_shot_number
-
-
         else:
             prev_shot_number = self._shot_count % self.shots_per_parameter
             self._shot_count += 1
             curr_shot_number = self._shot_count % self.shots_per_parameter
             
-        if self.parameter_buffer.empty():
+
+        if curr_shot_number < prev_shot_number:
             self.parameter_buffer.put(parameters)
-        elif curr_shot_number < prev_shot_number:
-            self.parameter_buffer.put(parameters)
-            self.shots_per_parameter = prev_shot_number + 1
             self._save_buffered_data()
     
             

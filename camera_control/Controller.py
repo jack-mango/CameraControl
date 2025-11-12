@@ -7,21 +7,19 @@ import multiprocessing
 from pylablib.devices.Andor import AndorSDK2
 import logging
 import numpy as np
+import json
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# TODO: Add config saving/loading
-
-# TODO: Integrate file worker. Add config for it. Allow it to save using multiple image formats.
-
-# TODO: If sensor setting option isn't available just set it to default. Also give error message if config
-# gives incorrect config option (like vss not available) and pick some default value.
+# TODO: Add support for user defined config.
 
 class Controller(QThread):
 
     new_data_signal = pyqtSignal(np.ndarray, dict)
     shot_counter_signal = pyqtSignal(int)  # Signal to emit shot counter value
+    rep_counter_signal = pyqtSignal(int)  # Signal to emit repetition counter value
     temperature_signal = pyqtSignal(float, str)  # Signal to emit temperature value and status
     camera_connection_signal = pyqtSignal(bool)  # Signal to emit camera connection status
     socket_connection_signal = pyqtSignal(bool)  # Signal to emit socket connection status
@@ -138,9 +136,7 @@ class Controller(QThread):
     def stop_acquisition(self):
         logger.info("Stopping acquisition...")
         self.acquisition_flag.clear()
-        
         self.stop_file_worker()
-        
         return
 
     def acquisition_in_progress(self):
@@ -373,6 +369,16 @@ class Controller(QThread):
             # Update the controllers max frames
             self.max_shots = new_config['max_shots']
 
+    def save_config(self):
+        """Save current configuration to config.json file"""
+        try:
+            with open('config.json', 'w') as f:
+                json.dump(self.config, f, indent=4)
+            logger.info("Configuration saved to config.json")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save configuration: {e}")
+            return False
     
     def start_file_worker(self):
         """Start the FileWorker thread for saving images"""

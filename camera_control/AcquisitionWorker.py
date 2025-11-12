@@ -56,7 +56,7 @@ class AcquisitionWorker(Process):
             # If acquisition flag is set (True), pull images and put them on the data queue
             if self.get_acquisition_flag() and not self.acquisition_in_progress():
                 self.camera.start_acquisition()
-            elif not self.get_acquisition_flag and self.acquisition_in_progress():
+            elif not self.get_acquisition_flag() and self.acquisition_in_progress():
                 self.camera.stop_acquisition()
             # Only pull images if we have a full n_frames_per_shot taken from the camera.
             # Then put them onto the data_queue. This corresponds to only taking images after an

@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QIntValidator
 
+# TODO: add a setting to use save_path from socket messages or HHMMSS.
+
 class AcquisitionSettingsDialog(QDialog):
     """Dialog for configuring acquisition settings"""
     def __init__(self, controller=None, parent=None):
@@ -69,6 +71,11 @@ class AcquisitionSettingsDialog(QDialog):
             
         form_layout.addRow("File Save Type:", self.file_type_combo)
         
+        # Data path
+        data_path_default = acquisition_config.get('data_path', '.temp') if acquisition_config else ".temp"
+        self.data_path_edit = QLineEdit(data_path_default)
+        form_layout.addRow("Data Path:", self.data_path_edit)
+        
         main_layout.addLayout(form_layout)
         main_layout.addStretch()
         
@@ -88,18 +95,23 @@ class AcquisitionSettingsDialog(QDialog):
         button_layout = QHBoxLayout()
         self.apply_btn = QPushButton("Apply")
         self.apply_btn.clicked.connect(self.apply_settings)
+        self.save_to_config_btn = QPushButton("Save to config")
+        self.save_to_config_btn.clicked.connect(self.save_to_config)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(self.apply_btn)
+        button_layout.addWidget(self.save_to_config_btn)
         button_layout.addWidget(cancel_btn)
         main_layout.addLayout(button_layout)
         
-        # Disable apply button if acquisition is in progress
+        # Disable apply and save buttons if acquisition is in progress
         if self.controller:
             is_acquiring = self.controller.acquisition_in_progress()
             self.apply_btn.setEnabled(not is_acquiring)
+            self.save_to_config_btn.setEnabled(not is_acquiring)
             if is_acquiring:
                 self.apply_btn.setToolTip("Cannot change settings during acquisition")
+                self.save_to_config_btn.setToolTip("Cannot change settings during acquisition")
     
     def on_max_shots_toggled(self, checked):
         """Enable/disable max shots text box based on checkbox state"""
@@ -129,6 +141,10 @@ class AcquisitionSettingsDialog(QDialog):
             # Apply file format
             selected_format = self.file_type_combo.currentText()
             acquisition_config['file_format'] = selected_format
+            
+            # Apply data path
+            data_path = self.data_path_edit.text()
+            acquisition_config['data_path'] = data_path
 
             # Apply auto frames per shot
             acquisition_config['auto_shots_per_parameter'] = self.shots_per_parameter_auto.isChecked()
@@ -148,6 +164,45 @@ class AcquisitionSettingsDialog(QDialog):
                 acquisition_config['max_shots'] = None
 
             self.controller.set_acquisition_config(acquisition_config)
+
+        # Close the dialog
+        self.accept()
+
+    def save_to_config(self):
+        """Apply settings and save to config.json"""
+        if self.controller:
+            # First apply the settings (same as apply_settings but don't close)
+            acquisition_config = {}
+
+            # Apply file format
+            selected_format = self.file_type_combo.currentText()
+            acquisition_config['file_format'] = selected_format
+            
+            # Apply data path
+            data_path = self.data_path_edit.text()
+            acquisition_config['data_path'] = data_path
+
+            # Apply auto frames per shot
+            acquisition_config['auto_shots_per_parameter'] = self.shots_per_parameter_auto.isChecked()
+            
+            # Apply frames per shot
+            frames_per_shot = int(self.frames_per_shot_edit.text())
+            acquisition_config['frames_per_shot'] = frames_per_shot
+
+            # Apply shots per parameter
+            acquisition_config['shots_per_parameter'] = int(self.shots_per_parameter_edit.text())
+
+            # Apply maximum shots
+            if self.max_shots_enabled_checkbox.isChecked():
+                max_shots = int(self.max_shots_edit.text())
+                acquisition_config['max_shots'] = max_shots
+            else:
+                acquisition_config['max_shots'] = None
+
+            self.controller.set_acquisition_config(acquisition_config)
+            
+            # Now save to config.json
+            self.controller.save_config()
 
         # Close the dialog
         self.accept()

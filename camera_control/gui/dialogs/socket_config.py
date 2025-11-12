@@ -47,10 +47,20 @@ class SocketConfigDialog(QDialog):
         if is_acquiring:
             self.connect_btn.setEnabled(False)
             self.connect_btn.setToolTip("Cannot change socket connection during acquisition")
+
+        # Save to config button
+        self.save_to_config_btn = QPushButton("Save to config")
+        self.save_to_config_btn.clicked.connect(self.save_to_config)
+        
+        # Disable save button if acquisition is in progress
+        if is_acquiring:
+            self.save_to_config_btn.setEnabled(False)
+            self.save_to_config_btn.setToolTip("Cannot change settings during acquisition")
         
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.reject)
         main_layout.addWidget(self.connect_btn)
+        main_layout.addWidget(self.save_to_config_btn)
         main_layout.addWidget(close_btn)
 
     def toggle_socket_connection(self):
@@ -79,3 +89,16 @@ class SocketConfigDialog(QDialog):
                 self.ip_address_edit.setEnabled(True)
                 self.port_edit.setEnabled(True)
                 logger.info("Disconnected from socket")
+
+    def save_to_config(self):
+        """Save socket settings to config.json"""
+        # Get current values from text fields
+        ip_address = self.ip_address_edit.text()
+        port = int(self.port_edit.text())
+        
+        # Update socket config in controller
+        self.controller.set_socket_config({"ip_address": ip_address, "port": port})
+        
+        # Save to config.json
+        self.controller.save_config()
+        logger.info(f"Socket settings saved to config: {ip_address}:{port}")

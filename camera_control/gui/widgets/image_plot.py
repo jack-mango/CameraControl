@@ -2,9 +2,10 @@
 
 import logging
 import numpy as np
+from scipy.ndimage import gaussian_filter
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLabel, 
-    QComboBox, QCheckBox, QLineEdit, QPushButton
+    QComboBox, QCheckBox, QLineEdit, QPushButton, QHBoxLayout
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator
@@ -20,12 +21,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: Add function builder, I think perhaps text input would be best?
 
-# TODO: Remove colorbars next to images, also make images take up more of the widget.
-
-# TODO: Flip the vertical in images so lower left is 0, 0.
-
 # TODO: Add parula colormap
-
 
 class ImagePlot(QWidget):
     """Individual plot widget for displaying camera images with configurable processing"""
@@ -45,15 +41,20 @@ class ImagePlot(QWidget):
         self.buffer_size = buffer_size
         self.cmin = None
         self.cmax = None
+        self.gaussian_blur_enabled = True
+        self.gaussian_blur_sigma = 1.0
         
         # Convert pixels to inches
         width_inches = width_px / dpi
         height_inches = height_px / dpi
         
-        # Create matplotlib figure with transparent background
+        # Create matplotlib figure with transparent background and tight layout
         self.figure = Figure(figsize=(width_inches, height_inches), dpi=dpi, facecolor='none')
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111, facecolor='none')
+        
+        # Adjust subplot to use more space - reduce margins significantly
+        self.figure.subplots_adjust(left=0.08, right=0.97, top=0.97, bottom=0.08)
         
         # Style the axes
         self.ax.spines['bottom'].set_color(COLORS['text_light'])
@@ -131,7 +132,7 @@ class ImagePlot(QWidget):
         # Processing function selection
         self.function_combo = QComboBox()
         self.function_combo.setMinimumWidth(150)
-        self.function_combo.addItems(['None', 'Log Scale', 'Square Root', 'Absolute Value'])
+        self.function_combo.addItems(['x[0]', 'x[1]', 'x[0] - x[1]', 'x[1] - x[0]'])
         self.function_combo.currentTextChanged.connect(self.on_function_changed)
         form_layout.addRow("Function:", self.function_combo)
         
@@ -161,6 +162,18 @@ class ImagePlot(QWidget):
         set_from_current_btn = QPushButton("Set from current image")
         set_from_current_btn.clicked.connect(self.set_scale_from_current)
         form_layout.addRow("", set_from_current_btn)
+        
+        # Gaussian blur settings
+        gaussian_blur_layout = QHBoxLayout()
+        self.gaussian_blur_checkbox = QCheckBox("Enable")
+        self.gaussian_blur_checkbox.setChecked(self.gaussian_blur_enabled)
+        self.gaussian_blur_checkbox.stateChanged.connect(self.on_gaussian_blur_toggled)
+        self.gaussian_blur_edit = QLineEdit(str(self.gaussian_blur_sigma))
+        self.gaussian_blur_edit.setValidator(QDoubleValidator(0.1, 10.0, 1))
+        self.gaussian_blur_edit.textChanged.connect(self.on_gaussian_blur_changed)
+        gaussian_blur_layout.addWidget(self.gaussian_blur_checkbox)
+        gaussian_blur_layout.addWidget(self.gaussian_blur_edit)
+        form_layout.addRow("Gaussian Blur σ:", gaussian_blur_layout)
         
         layout.addLayout(form_layout)
         
@@ -230,18 +243,35 @@ class ImagePlot(QWidget):
     
     def on_function_changed(self, function_name):
         """Handle processing function change"""
-        if function_name == 'None':
-            self.processing_function = None
-        elif function_name == 'Log Scale':
-            self.processing_function = lambda x: np.log1p(x)
-        elif function_name == 'Square Root':
-            self.processing_function = lambda x: np.sqrt(x)
-        elif function_name == 'Absolute Value':
-            self.processing_function = lambda x: np.abs(x)
+        if function_name == 'x[0]':
+            self.processing_function = lambda x: x[0]
+        elif function_name == 'x[1]':
+            self.processing_function = lambda x: x[1]
+        elif function_name == 'x[0] - x[1]':
+            self.processing_function = lambda x: x[0] - x[1]
+        elif function_name == 'x[1] - x[0]':
+            self.processing_function = lambda x: x[1] - x[0]
         else:
-            self.processing_function = None
+            self.processing_function = lambda x: x[0]  # Default to first image
         
         self.update_display()
+    
+    def on_gaussian_blur_toggled(self, state):
+        """Handle gaussian blur checkbox toggle"""
+        self.gaussian_blur_enabled = (state == Qt.Checked)
+        self.update_display()
+    
+    def on_gaussian_blur_changed(self, text):
+        """Handle gaussian blur sigma change"""
+        if text:
+            try:
+                sigma = float(text)
+                if sigma > 0:
+                    self.gaussian_blur_sigma = sigma
+                    if self.gaussian_blur_enabled:
+                        self.update_display()
+            except ValueError:
+                pass
     
     def on_cmax_changed(self, text):
         """Handle color max change"""
@@ -289,20 +319,31 @@ class ImagePlot(QWidget):
         # Choose which data to display based on mode
         if self.display_mode == 'current':
             # Use only the most recent image from buffer
-            display_data = self.image_data
+            data_to_process = self.image_data
         elif self.display_mode == 'average':
             # Average all images in the buffer
             if len(self.accumulated_images) == 0:
                 return None
-            display_data = np.mean(self.accumulated_images, axis=0)
+            data_to_process = np.mean(self.accumulated_images, axis=0)
         
         # Apply processing function if set
+        # The processing function operates on the shots axis
         if self.processing_function is not None:
             try:
-                display_data = self.processing_function(display_data)
+                display_data = self.processing_function(data_to_process)
             except Exception as e:
                 logger.warning(f"Error applying processing function: {e}")
                 return None
+        else:
+            # Default: take first shot
+            display_data = data_to_process[0]
+        
+        # Apply gaussian blur if enabled
+        if self.gaussian_blur_enabled and self.gaussian_blur_sigma > 0:
+            try:
+                display_data = gaussian_filter(display_data, sigma=self.gaussian_blur_sigma)
+            except Exception as e:
+                logger.warning(f"Error applying gaussian blur: {e}")
         
         return display_data
     
@@ -349,25 +390,14 @@ class ImagePlot(QWidget):
         if display_data is None:
             return
         
-        # Determine color limits
-        if self.auto_scale_checkbox.isChecked() or (self.cmin is None and self.cmax is None):
-            # Auto-scale: use min/max from current data
-            vmin = np.min(display_data)
-            vmax = np.max(display_data)
-        else:
-            # Use manual limits (if set)
-            vmin = self.cmin if self.cmin is not None else np.min(display_data)
-            vmax = self.cmax if self.cmax is not None else np.max(display_data)
-        
         # Update plot
         if self.im is None:
             # First time plotting
-            self.im = self.ax.imshow(display_data)#, cmap=self.colormap, aspect='auto', vmin=vmin, vmax=vmax)
-            self.figure.colorbar(self.im, ax=self.ax)
+            self.im = self.ax.imshow(display_data, cmap=self.colormap, origin='lower')#, cmap=self.colormap, aspect='auto', vmin=vmin, vmax=vmax)
         else:
             # Update existing image
             self.im.set_data(display_data)
-            self.im.set_clim(vmin=vmin, vmax=vmax)
+            self.im.set_clim(vmin=self.cmin, vmax=self.cmax)
         
         self.canvas.draw()
     
@@ -375,6 +405,5 @@ class ImagePlot(QWidget):
         """Clear the plot and accumulated data"""
         self.image_data = None
         self.accumulated_images = []
-        self.ax.clear()
         self.im = None
         self.canvas.draw()

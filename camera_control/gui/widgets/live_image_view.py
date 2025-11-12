@@ -11,21 +11,21 @@ from .image_plot import ImagePlot
 
 class LiveImageViewWidget(QWidget):
     """Widget containing a dynamic grid of camera plots"""
-    def __init__(self, width_px, height_px, n_rows=1, n_cols=3, parent=None):
+    def __init__(self, n_rows=1, n_cols=3, parent=None):
         super().__init__(parent)
         
         self.setObjectName("live-image-view")
         
-        self.width_px = width_px
-        self.height_px = height_px
-
+        # Store initial dimensions as base size per plot
+        self.base_plot_width = 512
+        self.base_plot_height = 512
+        
         self.n_rows = n_rows
         self.n_cols = n_cols
 
         self.plots = []
 
-        # Set maximum height on self
-        self.setMaximumHeight(height_px)
+        # Don't set maximum height - let it grow/shrink with grid
         self.setAttribute(Qt.WA_StyledBackground, True)
 
         # Main layout - use VBox to stack title, plots and buttons
@@ -59,21 +59,11 @@ class LiveImageViewWidget(QWidget):
         
         row_button_height = 32
         col_button_width = 32
-
-        # Calculate available width for plots (subtract col buttons and padding)
-        available_width = width_px - col_button_width - (3 * DEFAULT_PADDING)
         
-        # Column buttons take up full plot height
-        # Available height is the plot container height (excluding row buttons and main layout padding)
-        plot_container_height = height_px - row_button_height - (4 * DEFAULT_PADDING)
-        # Two buttons with spacing between them
-        col_button_height = (plot_container_height - DEFAULT_PADDING) // 2
+        # Calculate vertical centering for column buttons
+        col_button_height = 50
         
-        # Calculate vertical centering - add stretches to center the buttons
-        total_buttons_height = col_button_height * 2 + DEFAULT_PADDING
-        top_margin = (plot_container_height - total_buttons_height) // 2
-        
-        col_button_layout.addSpacing(top_margin)
+        col_button_layout.addStretch()
         
         self.add_col_btn = QPushButton("+")
         self.add_col_btn.setFixedSize(col_button_width, col_button_height)
@@ -87,7 +77,7 @@ class LiveImageViewWidget(QWidget):
         
         col_button_layout.addWidget(self.remove_col_btn)
         
-        col_button_layout.addSpacing(top_margin)
+        col_button_layout.addStretch()
         
         plot_container_layout.addLayout(col_button_layout)
 
@@ -98,12 +88,10 @@ class LiveImageViewWidget(QWidget):
         row_button_layout.setContentsMargins(0, DEFAULT_PADDING, 0, 0)
         row_button_layout.setSpacing(DEFAULT_PADDING)
         
-        # Two buttons with spacing between them
-        row_button_width = (available_width - DEFAULT_PADDING) // 2
+        row_button_width = 50
+        row_button_height = 32
         
-        # Calculate horizontal centering
-        left_margin = (available_width - (row_button_width * 2 + DEFAULT_PADDING)) // 2
-        row_button_layout.addSpacing(left_margin)
+        row_button_layout.addStretch()
         
         self.add_row_btn = QPushButton("+")
         self.add_row_btn.setFixedSize(row_button_width, row_button_height)
@@ -116,12 +104,8 @@ class LiveImageViewWidget(QWidget):
         row_button_layout.addWidget(self.add_row_btn)
         row_button_layout.addWidget(self.remove_row_btn)
         
-        # Add right spacing to center
-        row_button_layout.addSpacing(left_margin)
-        
-        # Add spacer at right to keep corner clear (width of col buttons + padding)
-        row_button_layout.addSpacing(col_button_width + DEFAULT_PADDING)
-        
+        row_button_layout.addStretch()
+
         main_layout.addLayout(row_button_layout)
 
         self.initialize_plots()
@@ -129,28 +113,72 @@ class LiveImageViewWidget(QWidget):
     def add_row(self):
         """Add a new row of plots"""
         self.n_rows += 1
-        self.clear_layout()
-        self.initialize_plots()
+        self.rebuild_grid()
 
     def remove_row(self):
         """Remove a row of plots"""
         if self.n_rows > 1:
             self.n_rows -= 1
-            self.clear_layout()
-            self.initialize_plots()
+            self.rebuild_grid()
 
     def add_column(self):
         """Add a new column of plots"""
         self.n_cols += 1
-        self.clear_layout()
-        self.initialize_plots()
+        self.rebuild_grid()
 
     def remove_column(self):
         """Remove a column of plots"""
         if self.n_cols > 1:
             self.n_cols -= 1
-            self.clear_layout()
-            self.initialize_plots()
+            self.rebuild_grid()
+
+    def rebuild_grid(self):
+        """Rebuild the grid layout preserving existing plots where possible"""
+        # Save existing plots in a flat list
+        old_plots = []
+        for row in self.plots:
+            old_plots.extend(row)
+        
+        # Remove all widgets from layout (but don't delete them yet)
+        while self.layout.count():
+            child = self.layout.takeAt(0)
+            if child.widget():
+                child.widget().setParent(None)
+        
+        # Use fixed plot sizes
+        plot_width = self.base_plot_width
+        plot_height = self.base_plot_height
+        
+        # Rebuild the 2D plots array
+        self.plots = []
+        plot_index = 0
+        
+        for r in range(self.n_rows):
+            row_plots = []
+            for c in range(self.n_cols):
+                if plot_index < len(old_plots):
+                    # Reuse existing plot
+                    plot = old_plots[plot_index]
+                    plot.setParent(self)  # Re-parent to this widget
+                else:
+                    # Create new plot
+                    plot = ImagePlot(
+                        width_px=plot_width, 
+                        height_px=plot_height, 
+                        buffer_size=20,
+                        plot_number=plot_index + 1
+                    )
+                
+                # Set fixed size to maintain aspect ratio
+                plot.setFixedSize(plot_width, plot_height)
+                self.layout.addWidget(plot, r, c)
+                row_plots.append(plot)
+                plot_index += 1
+            self.plots.append(row_plots)
+        
+        # Delete any excess plots that are no longer needed
+        for i in range(plot_index, len(old_plots)):
+            old_plots[i].deleteLater()
 
     def clear_layout(self):
         """Remove all widgets from the layout"""
@@ -164,8 +192,9 @@ class LiveImageViewWidget(QWidget):
 
     def initialize_plots(self):
         """Initialize plots and store them in a 2d list for easy access"""
-        plot_width = self.get_plot_width_px()
-        plot_height = self.get_plot_height_px()
+        # Use fixed plot size regardless of grid dimensions
+        plot_width = self.base_plot_width
+        plot_height = self.base_plot_height
         
         self.plots = []
         
@@ -180,6 +209,8 @@ class LiveImageViewWidget(QWidget):
                     buffer_size=20,
                     plot_number=plot_counter
                 )
+                # Set fixed size to maintain aspect ratio
+                plot.setFixedSize(plot_width, plot_height)
                 self.layout.addWidget(plot, r, c)
                 row_plots.append(plot)
                 plot_counter += 1
@@ -187,11 +218,11 @@ class LiveImageViewWidget(QWidget):
 
     def get_plot_width_px(self):
         """Get width of individual plots in pixels"""
-        return self.width_px // self.n_cols
+        return self.base_plot_width
     
     def get_plot_height_px(self):
         """Get height of individual plots in pixels"""
-        return self.height_px // self.n_rows
+        return self.base_plot_height
 
     def get_plot(self, row, col):
         """Get a specific plot by row and column"""

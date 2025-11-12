@@ -71,17 +71,30 @@ class CameraConfigDialog(QDialog):
         if controller.get_is_camera_connected():
             self.make_sensor_settings_tab()
             self.make_image_settings_tab()
+            
+            # Create button layout for Apply and Save to Config
+            button_layout = QVBoxLayout()
+            
             self.apply_btn = QPushButton("Apply")
             self.apply_btn.clicked.connect(self.apply_settings)
-            self.main_layout.addWidget(self.apply_btn)
+            button_layout.addWidget(self.apply_btn)
             
-            # Disable apply button if acquisition is in progress
+            self.save_to_config_btn = QPushButton("Save to Config")
+            self.save_to_config_btn.clicked.connect(self.save_to_config)
+            button_layout.addWidget(self.save_to_config_btn)
+            
+            self.main_layout.addLayout(button_layout)
+            
+            # Disable apply and save buttons if acquisition is in progress
             is_acquiring = self.controller.acquisition_in_progress()
             self.apply_btn.setEnabled(not is_acquiring)
+            self.save_to_config_btn.setEnabled(not is_acquiring)
             if is_acquiring:
                 self.apply_btn.setToolTip("Cannot change settings during acquisition")
+                self.save_to_config_btn.setToolTip("Cannot change settings during acquisition")
         else:
             self.apply_btn = None
+            self.save_to_config_btn = None
         
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.reject)
@@ -193,6 +206,40 @@ class CameraConfigDialog(QDialog):
         self.controller.set_camera_config(new_camera_config)
         self.controller.set_image_config(new_image_config)
     
+    def save_to_config(self):
+        """Apply settings and save to config.json"""
+        # Extract camera settings
+        new_camera_config = {}
+        for setting_name, widget in self.camera_widgets.items():
+            if isinstance(widget, QComboBox):
+                new_camera_config[setting_name] = widget.currentText()
+            elif isinstance(widget, QCheckBox):
+                new_camera_config[setting_name] = widget.isChecked()
+            elif isinstance(widget, QLineEdit):
+                text = widget.text()
+                new_camera_config[setting_name] = text
+        # Extract image settings
+        new_image_config = {}
+        for setting_name, widget in self.image_widgets.items():
+            if isinstance(widget, QComboBox):
+                new_image_config[setting_name] = widget.currentText()
+            elif isinstance(widget, QCheckBox):
+                new_image_config[setting_name] = widget.isChecked()
+            elif isinstance(widget, QLineEdit):
+                text = widget.text()
+                new_image_config[setting_name] = text
+
+        for setting_name, widget in self.image_widgets.items():
+            text = widget.text()
+            new_image_config[setting_name] = text
+
+        # Save via the controller
+        self.controller.set_camera_config(new_camera_config)
+        self.controller.set_image_config(new_image_config)
+        
+        # Save to config.json
+        self.controller.save_config()
+    
     def search_cameras(self):
         """Search for cameras and populate table"""
         
@@ -251,15 +298,24 @@ class CameraConfigDialog(QDialog):
                 btn.setText("Disconnect")
                 self.make_sensor_settings_tab()
                 self.make_image_settings_tab()
+                
+                # Create Apply button
                 self.apply_btn = QPushButton("Apply")
                 self.apply_btn.clicked.connect(self.apply_settings)
                 self.main_layout.insertWidget(self.main_layout.count() - 1, self.apply_btn)
                 
-                # Disable apply button if acquisition is in progress
+                # Create Save to Config button
+                self.save_to_config_btn = QPushButton("Save to config")
+                self.save_to_config_btn.clicked.connect(self.save_to_config)
+                self.main_layout.insertWidget(self.main_layout.count() - 1, self.save_to_config_btn)
+                
+                # Disable apply and save buttons if acquisition is in progress
                 is_acquiring = self.controller.acquisition_in_progress()
                 self.apply_btn.setEnabled(not is_acquiring)
+                self.save_to_config_btn.setEnabled(not is_acquiring)
                 if is_acquiring:
                     self.apply_btn.setToolTip("Cannot change settings during acquisition")
+                    self.save_to_config_btn.setToolTip("Cannot change settings during acquisition")
                 
                 # Disable other connect buttons
                 for r in range(self.camera_table.rowCount()):
