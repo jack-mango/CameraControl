@@ -76,14 +76,22 @@ class AcquisitionSettingsDialog(QDialog):
         self.data_path_edit = QLineEdit(data_path_default)
         form_layout.addRow("Data Path:", self.data_path_edit)
         
+        # Use socket data path
+        use_socket_data_path_default = acquisition_config.get('use_socket_data_path', False) if acquisition_config else False
+        self.use_socket_data_path_checkbox = QCheckBox("Use socket filename")
+        self.use_socket_data_path_checkbox.setChecked(use_socket_data_path_default)
+        form_layout.addRow("Use Socket Data Path:", self.use_socket_data_path_checkbox)
+        
         main_layout.addLayout(form_layout)
         main_layout.addStretch()
         
         # Connect checkbox signals to enable/disable text boxes
         self.max_shots_enabled_checkbox.toggled.connect(self.on_max_shots_toggled)
+        self.use_socket_data_path_checkbox.toggled.connect(self.on_use_socket_data_path_toggled)
         
         # Set initial states
         self.on_max_shots_toggled(self.max_shots_enabled_checkbox.isChecked())
+        self.on_use_socket_data_path_toggled(self.use_socket_data_path_checkbox.isChecked())
         
         # Connect to socket connection signal for dynamic updates
         if self.controller:
@@ -116,6 +124,10 @@ class AcquisitionSettingsDialog(QDialog):
     def on_max_shots_toggled(self, checked):
         """Enable/disable max shots text box based on checkbox state"""
         self.max_shots_edit.setEnabled(checked)
+    
+    def on_use_socket_data_path_toggled(self, checked):
+        """Enable/disable data path text box based on use socket data path checkbox state"""
+        self.data_path_edit.setEnabled(not checked)
     
     def on_socket_connection_changed(self, is_connected):
         """
@@ -162,6 +174,9 @@ class AcquisitionSettingsDialog(QDialog):
                 acquisition_config['max_shots'] = max_shots
             else:
                 acquisition_config['max_shots'] = None
+            
+            # Apply use socket data path
+            acquisition_config['use_socket_data_path'] = self.use_socket_data_path_checkbox.isChecked()
 
             self.controller.set_acquisition_config(acquisition_config)
 
@@ -198,6 +213,9 @@ class AcquisitionSettingsDialog(QDialog):
                 acquisition_config['max_shots'] = max_shots
             else:
                 acquisition_config['max_shots'] = None
+            
+            # Apply use socket data path
+            acquisition_config['use_socket_data_path'] = self.use_socket_data_path_checkbox.isChecked()
 
             self.controller.set_acquisition_config(acquisition_config)
             

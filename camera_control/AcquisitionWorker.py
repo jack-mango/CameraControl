@@ -22,6 +22,7 @@ class AcquisitionWorker(Process):
                 acquisition_flag,
                 teardown_flag,
                 frames_per_shot,
+                curr_config,
                 timeout=0.01):
     
         super().__init__()
@@ -33,7 +34,7 @@ class AcquisitionWorker(Process):
         self.acquisition_flag = acquisition_flag
         self.timeout = timeout
         self.frames_per_shot = frames_per_shot
-        self.curr_config = {}
+        self.curr_config = curr_config
         self.error = ''
     
     def run(self):
@@ -76,9 +77,14 @@ class AcquisitionWorker(Process):
             self.camera.set_frame_format("array")
             logger.info(f"Sucessfully connected to camera at idx {self.camera_idx}!")
             self.is_camera_connected = True
+            for key, value in self.curr_config.items():
+                success = self.handle_config_update(key, value)
+                if not success:
+                    self.error = f"Failed to update camera setting: {key} to value: {value}"
+                    return
             return True
-        except:
-            logger.info(f"Unable to connect to camera at idx {self.camera_idx}!")
+        except Exception as e:
+            logger.info(f"Unable to connect to camera at idx {self.camera_idx}! Error: {e}")
             return False
     
     def disconnect_camera(self, idx):
@@ -200,7 +206,7 @@ class AcquisitionWorker(Process):
             return 0
         
         first, last = rng
-        unread = last - first + 1
+        unread = last - first
         return unread
     
     def pull_images(self):
@@ -218,8 +224,7 @@ class AcquisitionWorker(Process):
         total_unread = last - first + 1
         
         # Read the oldest frames_per_shot images
-        read_range = (first, first + self.frames_per_shot.value)
-        
+        read_range = (first, first + self.frames_per_shot.value)    
         logger.debug(f"Reading frames {read_range[0]}–{read_range[1]} "
                     f"(out of available {total_unread}, indices {first}–{last})")
 
@@ -275,9 +280,9 @@ class AcquisitionWorker(Process):
     
     def set_roi(self, roi):
         self.camera.set_roi(roi['x_left'],
-                                     roi['x_right'],
-                                     roi['y_bottom'],
-                                     roi['y_top'],
-                                     roi['x_binning'],
-                                     roi['y_binning'])
+                            roi['x_right'],
+                            roi['y_bottom'],
+                            roi['y_top'],
+                            hbin=roi['x_binning'],
+                            vbin=roi['y_binning'])
         return

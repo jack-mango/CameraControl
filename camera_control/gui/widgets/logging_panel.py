@@ -66,6 +66,21 @@ class LoggingPanel(QWidget):
         logging.getLogger().addHandler(self.log_handler)
         logging.getLogger().setLevel(logging.INFO)
     
+    def __del__(self):
+        """Cleanup logging handler when widget is destroyed"""
+        try:
+            if hasattr(self, 'log_handler'):
+                logging.getLogger().removeHandler(self.log_handler)
+        except:
+            pass  # Ignore errors during cleanup
+    
+    def cleanup(self):
+        """Explicitly cleanup the logging handler"""
+        try:
+            logging.getLogger().removeHandler(self.log_handler)
+        except:
+            pass
+    
     def append_log(self, message):
         """Append a log message to the display"""
         self.log_display.append(message)

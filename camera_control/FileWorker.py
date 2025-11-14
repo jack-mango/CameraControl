@@ -5,7 +5,7 @@ import logging
 import numpy as np
 from queue import Queue
 from scipy.io import savemat
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal
 
 
 if __name__ == "__main__":
@@ -13,29 +13,33 @@ if __name__ == "__main__":
 
 logger = logging.getLogger(__name__)
 
-class FileWorker(QThread):
-    """QThread worker for saving image data to files"""
+# TODO: If the year month day directories don't exist create them.
+
+class FileWorker(QObject):
+    """Worker object for saving image data to files"""
     
     # Signals
     save_complete_signal = pyqtSignal(str)  # Emits filename when save completes
-    save_error_signal = pyqtSignal(str)     # Emits error message if save fails
 
-    def __init__(self, file_path, file_extension, shots_per_parameter=1, auto_shots_per_parameter=False):
+    def __init__(self, data_path, file_format, shots_per_parameter=1, auto_shots_per_parameter=False, use_socket_data_path=False, **kwargs):
         """
         Initialize FileWorker
         
         Args:
-            file_path: Directory path where files will be saved
-            file_extension: File format extension (.hdf5, .npz, .mat)
+            data_path: Directory path where files will be saved
+            file_format: File format extension (.hdf5, .npz, .mat)
             shots_per_parameter: Number of shots to buffer before saving
             auto_shots_per_parameter: If True, auto-detect when to save based on parameter changes
+            use_socket_data_path: If True, use filename from socket parameters instead of timestamp
+            **kwargs: Additional acquisition config parameters (e.g., frames_per_shot, max_shots)
         """
         super().__init__()
         # Public attributes
-        self.file_path = file_path
-        self.save_format = file_extension
+        self.file_path = data_path
+        self.file_extension = file_format
         self.shots_per_parameter = shots_per_parameter
         self.auto_shots_per_parameter = auto_shots_per_parameter
+        self.use_socket_data_path = use_socket_data_path
         
         # Internal buffers using Queue (thread-safe)
         self.image_buffer = Queue()
@@ -44,9 +48,6 @@ class FileWorker(QThread):
         
         # Shot counter
         self._shot_count = 0
-        
-        # Private attributes
-        self._running = False
 
 
     def _save(self, images, params):
@@ -63,54 +64,82 @@ class FileWorker(QThread):
         Raises:
             Exception: If file saving fails
         """
-        # Create timestamp for filename
-        t = time.localtime()
-        date_dir = time.strftime("%Y\\%m\\%d\\", t)
-        timestamp = time.strftime("%H%M_%S", t)
-        
-        # Ensure directory exists
-        date_dir_full_path = os.path.join(self.file_path, date_dir)
-        os.makedirs(date_dir_full_path, exist_ok=True)
+        # Determine filename
+        if self.use_socket_data_path and 'filename' in params:
+            # Use filename from socket parameters
+            filename = params.pop('filename')
+        else:
+            # Create timestamp for filename
+            t = time.localtime()
+            date_dir = time.strftime("%Y\\%m\\%d\\", t)
+            timestamp = time.strftime("%H%M_%S", t)
+            filename = timestamp
+            date_dir_full_path = os.path.join(self.file_path, date_dir)
+            os.makedirs(date_dir_full_path, exist_ok=True)   
         
         # Route to appropriate save method based on format
-        if self.save_format == '.hdf5' or self.save_format == '.h5':
-            return self._save_hdf5(images, params, timestamp)
-        elif self.save_format == '.npz':
-            return self._save_npz(images, params, timestamp)
-        elif self.save_format == '.mat':
-            return self._save_mat(images, params, timestamp)
+        if self.file_extension == '.hdf5' or self.file_extension == '.h5':
+            return self._save_hdf5(images, params, filename)
+        elif self.file_extension == '.npz':
+            return self._save_npz(images, params, filename)
+        elif self.file_extension == '.mat':
+            return self._save_mat(images, params, filename)
         else:
-            raise ValueError(f"Unsupported file format: {self.save_format}")
+            raise ValueError(f"Unsupported file format: {self.file_extension}")
 
     
     def on_new_data(self, images, parameters):
         """
         Slot to receive new data from Controller's new_data_signal.
-        Buffers data and saves when shots_per_parameter is reached.
+        Simply buffers the data - Controller will signal when to save.
         
         Args:
             images: numpy array of image data
             parameters: dict of parameters
         """
-        # Add to buffers
+        # Just buffer the data
         self.image_buffer.put(images)
-
-        if self.auto_shots_per_parameter:
-            curr_shot_number = parameters.pop('AAAreps')
-            self.shots_per_parameter = parameters['n_reps']
-            prev_shot_number = self._shot_count
-            self._shot_count = curr_shot_number
-        else:
-            prev_shot_number = self._shot_count % self.shots_per_parameter
-            self._shot_count += 1
-            curr_shot_number = self._shot_count % self.shots_per_parameter
-            
-
-        if curr_shot_number < prev_shot_number:
-            self.parameter_buffer.put(parameters)
-            self._save_buffered_data()
+        self.parameter_buffer.put(parameters)
+        logger.debug(f"Buffered data. Current buffer size: {self.image_buffer.qsize()}")
     
+    def save_buffered_data(self):
+        """
+        Slot to trigger saving of buffered data.
+        Called when Controller emits save_trigger_signal.
+        """
+        if self.image_buffer.empty():
+            logger.warning("No data in buffer to save")
+            return
+        
+        try:
+            # Pull all buffered items
+            images_list = []
+            params_list = []
             
+            while not self.image_buffer.empty():
+                images_list.append(self.image_buffer.get())
+                params_list.append(self.parameter_buffer.get())
+            
+            if not images_list:
+                logger.warning("No images to save")
+                return
+            
+            # Use the last parameter set (most recent)
+            params = params_list[-1] if params_list else {}
+            params['array_axes'] = ('shots_per_parameter', 'frames_per_shot', 'y_pixels', 'x_pixels')
+            params['num_shots'] = len(images_list)
+            
+            # Stack all buffered images into single array
+            stacked_images = np.stack(images_list, axis=0)
+            
+            # Save to file
+            fname = self._save(stacked_images, params)
+            self.save_complete_signal.emit(fname)
+            logger.info(f"Saved {len(images_list)} shots to {fname}")
+            
+        except Exception as e:
+            error_msg = f"Error saving buffered data: {str(e)}"
+            logger.error(error_msg)
 
     def _save_buffered_data(self):
         """Save the buffered images and parameters to file"""
@@ -139,32 +168,18 @@ class FileWorker(QThread):
             
         except Exception as e:
             error_msg = f"Error saving buffered data: {str(e)}"
-            self.save_error_signal.emit(error_msg)
             logger.error(error_msg)
     
-    def run(self):
-        """Main thread loop - keeps thread alive for signal processing"""
-        self._running = True
-        logger.info("FileWorker thread started (signal-based mode)")
-        
-        # This thread now just stays alive to process signals
-        # The actual work is done in on_new_data() slot
-        self.exec_()  # Start Qt event loop for signal processing
-        
-        logger.info("FileWorker thread stopped")
-    
     def stop(self):
-        """Stop the thread gracefully"""
-        logger.info("Stopping FileWorker thread...")
+        """Stop the FileWorker gracefully"""
+        logger.info("Stopping FileWorker...")
         
         # Save any remaining buffered data before stopping
         if not self.image_buffer.empty():
             logger.info(f"Saving remaining {self.image_buffer.qsize()} shots before stopping")
-            self._save_buffered_data()
+            self.save_buffered_data()
         
-        self._running = False
-        self.quit()  # Stop Qt event loop
-        self.wait()  # Wait for thread to finish
+        logger.info("FileWorker stopped")
     
     def set_shots_per_parameter(self, shots_per_parameter):
         """Update the number of shots to buffer before saving"""
@@ -176,7 +191,7 @@ class FileWorker(QThread):
         self.auto_shots_per_parameter = auto_mode
         logger.info(f"Auto shots per parameter mode: {auto_mode}")
     
-    def set_save_format(self, file_extension):
+    def set_file_extension(self, file_extension):
         """Change the save format
         
         Args:
@@ -186,13 +201,13 @@ class FileWorker(QThread):
         if file_extension not in valid_formats:
             raise ValueError(f"Invalid format: {file_extension}. Valid formats: {valid_formats}")
         
-        self.save_format = file_extension
+        self.file_extension = file_extension
         logger.info(f"Save format changed to: {file_extension}")
     
 
-    def _save_hdf5(self, images, params, timestamp):
+    def _save_hdf5(self, images, params, filename):
         """Save images and params to HDF5 file"""
-        fname = os.path.join(self.file_path, f'{timestamp}.h5')
+        fname = os.path.join(self.file_path, f'{filename}.h5')
         
         try:
             with h5py.File(fname, "w") as f:
@@ -212,9 +227,9 @@ class FileWorker(QThread):
             logger.error(f"Failed to save HDF5 file {fname}: {e}")
             raise
     
-    def _save_npz(self, images, params, timestamp):
+    def _save_npz(self, images, params, filename):
         """Save images and params to NumPy .npz file"""
-        fname = os.path.join(self.file_path, f'{timestamp}.npz')
+        fname = os.path.join(self.file_path, f'{filename}.npz')
         
         try:
             # Combine images and params into one dictionary
@@ -230,10 +245,10 @@ class FileWorker(QThread):
             logger.error(f"Failed to save NPZ file {fname}: {e}")
             raise
     
-    def _save_mat(self, images, params, timestamp):
+    def _save_mat(self, images, params, filename):
         """Save images and params to MATLAB .mat file"""
         
-        fname = os.path.join(self.file_path, f'{timestamp}.mat')
+        fname = os.path.join(self.file_path, f'{filename}.mat')
         
         try:
             # Combine images and params into one dictionary

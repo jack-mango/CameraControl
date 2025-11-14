@@ -10,14 +10,14 @@
         "camera_specific_config": {
             "Trigger mode": "External",
             "Exposure time (ms)": "10",
-            "EM gain": "1",
-            "High EM gain": false,
+            "EM gain": "10",
+            "High EM gain": true,
             "Amplifier": "Electron Multiplying",
-            "Vertical shift speed (us)": "1.70",
-            "Horizontal shift speed (MHz)": "17",
+            "Vertical shift speed (us)": "0.90",
+            "Horizontal shift speed (MHz)": "10",
             "Preamp gain": "3.0",
             "Shutter mode": "Open",
-            "Temperature (C)": "-20"
+            "Temperature (C)": "-90"
         }
     },
     "image_config": {
@@ -25,15 +25,16 @@
         "Y Origin": "0",
         "X Width": "500",
         "Y Height": "500",
-        "X binning": "1",
-        "Y binning": "1"
+        "X binning": "5",
+        "Y binning": "5"
     },
     "acquisition_config": {
         "file_format": ".mat",
         "data_path": ".temp",
-        "auto_shots_per_parameter": false,
+        "auto_shots_per_parameter": true,
         "frames_per_shot": 2,
         "shots_per_parameter": 10,
-        "max_shots": 100
+        "max_shots": 100,
+        "use_socket_data_path": true
     }
 }

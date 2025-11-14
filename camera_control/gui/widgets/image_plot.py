@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 # TODO: Add parula colormap
 
+# TODO: Add plot grab button. Puts the current image onto your clipboard.
+
 class ImagePlot(QWidget):
     """Individual plot widget for displaying camera images with configurable processing"""
     def __init__(self, width_px=400, height_px=300, dpi=100, buffer_size=10, plot_number=None, parent=None):
@@ -375,6 +377,7 @@ class ImagePlot(QWidget):
     
     def update_image(self, image_data):
         """Update with new image data from camera"""
+        print(image_data.shape)
         self.image_data = image_data
         
         # Add to accumulated images for averaging

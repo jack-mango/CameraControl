@@ -159,9 +159,18 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Clean shutdown when window closes"""
+        # Remove the Qt logging handler before destroying widgets
+        try:
+            if hasattr(self, 'logging_panel'):
+                self.logging_panel.cleanup()
+        except Exception as e:
+            print(f"Error cleaning up logging panel: {e}")
+        
         if self.controller:
             self.controller.stop()
-            self.controller.wait()
+            if not self.controller.wait(5000):  # 5 second timeout
+                print("Warning: Controller did not stop within 5 seconds")
+                self.controller.terminate()
         event.accept()
 
     def open_camera_config(self):

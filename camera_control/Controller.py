@@ -15,11 +15,14 @@ logging.basicConfig(level=logging.INFO)
 
 # TODO: Add support for user defined config.
 
+# TODO: Track rep_counter internally and emit a signal for rep_counter to signal the file should be saved.
+
 class Controller(QThread):
 
     new_data_signal = pyqtSignal(np.ndarray, dict)
     shot_counter_signal = pyqtSignal(int)  # Signal to emit shot counter value
     rep_counter_signal = pyqtSignal(int)  # Signal to emit repetition counter value
+    save_trigger_signal = pyqtSignal()  # Signal to trigger FileWorker to save buffered data
     temperature_signal = pyqtSignal(float, str)  # Signal to emit temperature value and status
     camera_connection_signal = pyqtSignal(bool)  # Signal to emit camera connection status
     socket_connection_signal = pyqtSignal(bool)  # Signal to emit socket connection status
@@ -32,7 +35,7 @@ class Controller(QThread):
         self.config_queue = multiprocessing.Queue()
         self.acquisition_flag = multiprocessing.Event()
         self.acquisition_teardown_flag = multiprocessing.Event()
-        self.frames_per_shot = multiprocessing.Value('i', self.config['acquisition_config'].get('frames_per_shot', 1))  # integer counter
+        self.frames_per_shot = multiprocessing.Value('i', config['acquisition_config'].get('frames_per_shot', 1))  # integer counter
 
         self.image_queue = multiprocessing.Queue()
         self.parameter_queue = multiprocessing.Queue()
@@ -42,18 +45,20 @@ class Controller(QThread):
         self.connection_worker = None
         self.is_camera_connected = False
         self.is_socket_connected = False
+        
+        self._running = True  # Flag to control the run loop
 
         self.shot_counter = 0
         self.shot_number_in_rep = 0
-        self.rep_number = 0
+        self.rep_counter = 0
 
         self._connected_camera_settings = {}
         self._found_cameras = []  # Store found cameras for persistence
         self._camera_idx = None  # Currently connected camera index
+        self._all_camera_settings = {}  # Store settings for all found cameras {idx: settings_dict}
 
     def run(self):
         """Override QThread.run() - this executes in the background thread"""
-        self._running = True
         while self._running:
             self.msleep(100)  # sleep 100ms
 
@@ -87,8 +92,31 @@ class Controller(QThread):
                         
                         logger.info(f"Shot count: {self.shot_counter}")
 
-                        # Emit signal to FileWorker and GUI
+                        # Emit signal to FileWorker and GUI to buffer data
                         self.new_data_signal.emit(images, parameters)
+                        
+                        # Determine if we should trigger a save
+                        auto_shots_per_parameter = self.config.get('acquisition_config', {}).get('auto_shots_per_parameter', False)
+                        shots_per_parameter = self.config.get('acquisition_config', {}).get('shots_per_parameter', 1)
+                        
+                        should_save = False
+                        if auto_shots_per_parameter:
+                            # Auto mode: save when parameter changes (e.g., AAAreps decreases)
+                            curr_shot_number = parameters.get('AAAreps', 0)
+                            if hasattr(self, '_last_shot_number'):
+                                if curr_shot_number < self._last_shot_number:
+                                    should_save = True
+                                    logger.info(f"Parameter changed from {self._last_shot_number} to {curr_shot_number}, triggering save")
+                            self._last_shot_number = curr_shot_number
+                        else:
+                            # Manual mode: save every N shots
+                            if self.shot_counter % shots_per_parameter == 0:
+                                should_save = True
+                                logger.info(f"Reached {shots_per_parameter} shots, triggering save")
+                        
+                        if should_save:
+                            self.save_trigger_signal.emit()
+                            
                     except multiprocessing.queues.Empty:
                         # Race condition: one queue became empty between check and get
                         logger.warning("Race condition: Queue became empty after check")
@@ -98,15 +126,25 @@ class Controller(QThread):
 
     def stop(self):
         """Custom method for graceful shutdown"""
-        self._running = False
+        logger.info("Stopping Controller...")
+        self._running = False  # Stop the run loop
         self.acquisition_teardown_flag.set()
+
+        if self.file_worker:
+            if self.file_worker.isRunning():
+                self.file_worker.stop()
+                self.file_worker.wait()
         
-        # Stop FileWorker if running
-        if self.file_worker is not None:
-            self.file_worker.stop()
-            self.file_worker.wait()  # wait for thread to finish
-            
-        self.wait()  # wait for run() to finish
+        # Stop ConnectionWorker if running
+        if self.connection_worker:
+            if self.connection_worker.isRunning():
+                self.connection_worker.quit()
+                self.connection_worker.wait()  # wait for thread to finish
+        
+        # Signal the Controller's event loop to exit
+        # Note: quit() and wait() should be called from the parent thread (MainWindow.closeEvent)
+        self.quit()
+        logger.info("Controller stopped")
 
     def start_acquisition(self):
         """Start image acquisition"""
@@ -126,6 +164,7 @@ class Controller(QThread):
             
             self.acquisition_flag.set()
             self.shot_counter = 0
+            self.rep_counter = 0
             logger.info("Acquisition started")
             return True
             
@@ -157,14 +196,24 @@ class Controller(QThread):
         logger.info(f"Connecting to camera at idx {idx}...")
         
         try:
-            self._connected_camera_settings = self._get_available_settings(idx)
+            # Use cached settings if available, otherwise get them
+            if idx in self._all_camera_settings:
+                self._connected_camera_settings = self._all_camera_settings[idx]
+                logger.debug(f"Using cached settings for camera at idx {idx}")
+            else:
+                logger.warning(f"No cached settings for camera at idx {idx}, fetching...")
+                self._connected_camera_settings = self._get_available_settings(idx)
+            
+            intial_camera_config = self._camera_friendly_config(self.config['camera_config']['camera_specific_config'])
+            intial_camera_config.update(self._camera_friendly_config(self.config['image_config']))       
             self.acquisition_worker = AcquisitionWorker(idx, 
                                                         self.config_queue,
                                                         self.camera_status_queue,
                                                         self.image_queue,
                                                         self.acquisition_flag,
                                                         self.acquisition_teardown_flag,
-                                                        self.frames_per_shot
+                                                        self.frames_per_shot,
+                                                        intial_camera_config
                                                         )
             self.acquisition_worker.start()
             status = self.get_camera_status()
@@ -381,29 +430,20 @@ class Controller(QThread):
             return False
     
     def start_file_worker(self):
-        """Start the FileWorker thread for saving images"""
+        """Start the FileWorker for saving images"""
         try:
-            data_path = self.config['acquisition_config']['data_path']
-            file_extension = self.config['acquisition_config']['file_format']
-            shots_per_parameter = self.config['acquisition_config']['shots_per_parameter']
-            auto_shots_per_parameter = self.config['acquisition_config']['auto_shots_per_parameter']
             logger.info("Starting FileWorker")
             
-            self.file_worker = FileWorker(
-                data_path,
-                file_extension,
-                shots_per_parameter,
-                auto_shots_per_parameter
-            )
+            self.file_worker = FileWorker(**self.config['acquisition_config'])
             
-            # Use QueuedConnection to ensure file saving happens in background FileWorker thread
+            # Connect signals - FileWorker is now a QObject, not QThread
             self.new_data_signal.connect(self.file_worker.on_new_data)
+            self.save_trigger_signal.connect(self.file_worker.save_buffered_data)
             
             # Optionally connect FileWorker's signals for monitoring
             self.file_worker.save_complete_signal.connect(self._on_file_saved)
-            self.file_worker.save_error_signal.connect(self._on_file_error)
             
-            self.file_worker.start()
+            logger.info("FileWorker started")
             return True
         except Exception as e:
             logger.error(f"Failed to start FileWorker: {e}")
@@ -413,17 +453,12 @@ class Controller(QThread):
         """Handle file save completion"""
         logger.info(f"File saved successfully: {filename}")
     
-    def _on_file_error(self, error_msg):
-        """Handle file save error"""
-        logger.error(f"File save error: {error_msg}")
-    
     def stop_file_worker(self):
-        """Stop the FileWorker thread"""
+        """Stop the FileWorker"""
         if self.file_worker is not None:
             try:
                 logger.info("Stopping FileWorker")
                 self.file_worker.stop()
-                self.file_worker.wait()
                 self.file_worker = None
                 return True
             except Exception as e:
@@ -473,18 +508,27 @@ class Controller(QThread):
         n_cameras = AndorSDK2.get_cameras_number()
         logger.info(f"Found {n_cameras} cameras")
         available_cameras = []
+        self._all_camera_settings = {}  # Reset settings cache
+        
         for idx in range(n_cameras):
-            idx = 0
-            camera = AndorSDK2.AndorSDK2Camera(idx)
-            controller_mode, head_model, serial_number = camera.get_device_info()
-            logger.info(f"Found {head_model} model Andor camera at idx {idx} with serial number {serial_number}")
-            camera.close()
-            camera_info = {
-                'idx': idx,
-                'model': head_model,
-                'serial_number': str(serial_number)
-            }
-            available_cameras.append(camera_info)
+            try:
+                camera = AndorSDK2.AndorSDK2Camera(idx)
+                controller_mode, head_model, serial_number = camera.get_device_info()
+                logger.info(f"Found {head_model} model Andor camera at idx {idx} with serial number {serial_number}")
+                
+                # Get and store settings for this camera
+                settings = self._get_settings_from_camera(camera)
+                self._all_camera_settings[idx] = settings
+                
+                camera.close()
+                camera_info = {
+                    'idx': idx,
+                    'model': head_model,
+                    'serial_number': str(serial_number)
+                }
+                available_cameras.append(camera_info)
+            except Exception as e:
+                logger.error(f"Error accessing camera at idx {idx}: {e}")
         # Persist found cameras in the controller's private store and return a copy
         try:
             self._found_cameras = list(available_cameras)
@@ -493,26 +537,6 @@ class Controller(QThread):
             pass
 
         return list(self._found_cameras)
-    
-    def set_plot_mode(self):
-        """Current or averaging"""
-        return
-    
-    def set_plot_data(self):
-        """ Linear combination of images in the sequence."""
-        return
-    
-    def set_gaussian_filter(self, sigma):
-        return
-    
-    def set_colorscale(self):
-        return
-    
-    def load_camera_profile(self):
-        return
-    
-    def save_camera_profile(self):
-        return
     
     def get_connected_camera_settings_list(self):
         return self._connected_camera_settings
@@ -525,14 +549,21 @@ class Controller(QThread):
         """
         return list(self._found_cameras)
     
-    def _get_available_settings(self, idx):
-        camera = AndorSDK2.AndorSDK2Camera(idx)
+    def _get_settings_from_camera(self, camera):
+        """Extract available settings from an already-instantiated camera object.
+        
+        Args:
+            camera: AndorSDK2Camera instance
+            
+        Returns:
+            dict: Dictionary of available camera settings
+        """
         all_oamp_modes = camera.get_all_amp_modes()
-        oamp_kind = list(dict.fromkeys([mode[3]for mode in all_oamp_modes]))
+        oamp_kind = list(dict.fromkeys([mode[3] for mode in all_oamp_modes]))
         hss_mhz = list(dict.fromkeys([f"{int(mode[5])}" for mode in all_oamp_modes]))
         preamp_gain = list(dict.fromkeys([f"{mode[-1]:.1f}" for mode in all_oamp_modes]))
 
-        settings =  {
+        settings = {
             # TODO: Add support back in for internal triggering; add "Internal" : "int" below and proceed with implementation.
             "Trigger mode": {"External": "ext", "External exposure": "ext_exp"},
             "Exposure time (ms)": 1.0,
@@ -545,7 +576,21 @@ class Controller(QThread):
             "Shutter mode": {"Auto": "auto", "Open": "open", "Closed": "closed"},
             "Temperature (C)": 1.0
         }
-
+        return settings
+    
+    def _get_available_settings(self, idx):
+        """Get available settings by instantiating a camera.
+        
+        This method is kept as a fallback for when cached settings are not available.
+        
+        Args:
+            idx: Camera index
+            
+        Returns:
+            dict: Dictionary of available camera settings
+        """
+        camera = AndorSDK2.AndorSDK2Camera(idx)
+        settings = self._get_settings_from_camera(camera)
         camera.close()
         return settings
 
@@ -559,24 +604,36 @@ class Controller(QThread):
     def _camera_friendly_config(self, config):
         """ Camera settings are stored internally in a user friendly format. This method converts them to the format required by the camera API.
         """
-        friendly_config = config.copy()
+        friendly_config = {}
         camera_friendly_map = self._connected_camera_settings
-        if 'Trigger mode' in friendly_config:
-            friendly_config['Trigger mode'] = camera_friendly_map['Trigger mode'][friendly_config['Trigger mode']]
-        if 'Shutter mode' in friendly_config:
-            friendly_config['Shutter mode'] = camera_friendly_map['Shutter mode'][friendly_config['Shutter mode']]
-        if 'Amplifier' in friendly_config:
-            friendly_config['Amplifier'] = camera_friendly_map['Amplifier'].index(friendly_config['Amplifier'])
-        if 'Vertical shift speed (us)' in friendly_config:
-            friendly_config['Vertical shift speed (us)'] = camera_friendly_map['Vertical shift speed (us)'].index(friendly_config['Vertical shift speed (us)'])
-        if 'Horizontal shift speed (MHz)' in friendly_config:
-            friendly_config['Horizontal shift speed (MHz)'] = camera_friendly_map['Horizontal shift speed (MHz)'].index(friendly_config['Horizontal shift speed (MHz)'])
-        if 'Preamp gain' in friendly_config:
-            friendly_config['Preamp gain'] = camera_friendly_map['Preamp gain'].index(friendly_config['Preamp gain'])
-        if 'Temperature (C)' in friendly_config:
-            friendly_config['Temperature (C)'] = float(friendly_config['Temperature (C)'])
-        if 'Exposure Time (ms)' in friendly_config:
-            friendly_config['Exposure Time (ms)'] = float(friendly_config['Exposure Time (ms)'])
-        if 'EM gain' in friendly_config:
-            friendly_config['EM gain'] = int(friendly_config['EM gain'])
+        if 'Trigger mode' in config:
+            friendly_config['Trigger mode'] = camera_friendly_map['Trigger mode'][config['Trigger mode']]
+        if 'Shutter mode' in config:
+            friendly_config['Shutter mode'] = camera_friendly_map['Shutter mode'][config['Shutter mode']]
+        if 'Amplifier' in config:
+            friendly_config['Amplifier'] = camera_friendly_map['Amplifier'].index(config['Amplifier'])
+        if 'Vertical shift speed (us)' in config:
+            friendly_config['Vertical shift speed (us)'] = camera_friendly_map['Vertical shift speed (us)'].index(config['Vertical shift speed (us)'])
+        if 'Horizontal shift speed (MHz)' in config:
+            friendly_config['Horizontal shift speed (MHz)'] = camera_friendly_map['Horizontal shift speed (MHz)'].index(config['Horizontal shift speed (MHz)'])
+        if 'Preamp gain' in config:
+            friendly_config['Preamp gain'] = camera_friendly_map['Preamp gain'].index(config['Preamp gain'])
+        if 'Temperature (C)' in config:
+            friendly_config['Temperature (C)'] = float(config['Temperature (C)'])
+        if 'Exposure Time (ms)' in config:
+            friendly_config['Exposure Time (ms)'] = float(config['Exposure Time (ms)'])
+        if 'EM gain' in config:
+            friendly_config['EM gain'] = int(config['EM gain'])
+        if 'X binning' in config:
+            friendly_config['X binning'] = int(config['X binning'])
+        if 'Y binning' in config:
+            friendly_config['Y binning'] = int(config['Y binning'])
+        if 'X Origin' in config:
+            friendly_config['X Origin'] = int(config['X Origin'])
+        if 'Y Origin' in config:
+            friendly_config['Y Origin'] = int(config['Y Origin'])
+        if 'X Width' in config:
+            friendly_config['X Width'] = int(config['X Width'])
+        if 'Y Height' in config:
+            friendly_config['Y Height'] = int(config['Y Height'])
         return friendly_config

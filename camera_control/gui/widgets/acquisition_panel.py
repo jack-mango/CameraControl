@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt
 from ..constants import DEFAULT_PADDING
 from ..dialogs.acquisition_settings import AcquisitionSettingsDialog
 
+# TODO: Acquisition counters should reset on new acquisition start; make sure this happens in controller too.
 
 
 
