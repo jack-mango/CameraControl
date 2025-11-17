@@ -165,7 +165,6 @@ class LiveImageViewWidget(QWidget):
                     plot = ImagePlot(
                         width_px=plot_width, 
                         height_px=plot_height, 
-                        buffer_size=20,
                         plot_number=plot_index + 1
                     )
                 
@@ -206,7 +205,6 @@ class LiveImageViewWidget(QWidget):
                 plot = ImagePlot(
                     width_px=plot_width, 
                     height_px=plot_height, 
-                    buffer_size=20,
                     plot_number=plot_counter
                 )
                 # Set fixed size to maintain aspect ratio
@@ -246,3 +244,15 @@ class LiveImageViewWidget(QWidget):
         for row in self.plots:
             for plot in row:
                 plot.update_image(images)
+    
+    def on_rep_changed(self, rep_count):
+        """
+        Notify all plots that the repetition counter changed.
+        Each plot will clear its accumulated buffer.
+        
+        Args:
+            rep_count: New repetition count
+        """
+        for row in self.plots:
+            for plot in row:
+                plot.on_rep_changed(rep_count)

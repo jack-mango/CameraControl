@@ -22,7 +22,7 @@ class Controller(QThread):
     new_data_signal = pyqtSignal(np.ndarray, dict)
     shot_counter_signal = pyqtSignal(int)  # Signal to emit shot counter value
     rep_counter_signal = pyqtSignal(int)  # Signal to emit repetition counter value
-    save_trigger_signal = pyqtSignal()  # Signal to trigger FileWorker to save buffered data
+    save_trigger_signal = pyqtSignal(int)  # Signal to trigger FileWorker to save buffered data
     temperature_signal = pyqtSignal(float, str)  # Signal to emit temperature value and status
     camera_connection_signal = pyqtSignal(bool)  # Signal to emit camera connection status
     socket_connection_signal = pyqtSignal(bool)  # Signal to emit socket connection status
@@ -77,51 +77,43 @@ class Controller(QThread):
                     logger.error(f"Error reading camera status: {e}")
 
 
-            if self.acquisition_in_progress():
-                # Check if both queues have items before retrieving
-                # Note: empty() is not perfectly reliable for multiprocessing queues,
-                # but used here as a heuristic to avoid retrieving from one queue
-                # when the other is empty. The try/except still handles edge cases.
-                if not self.image_queue.empty() and not self.parameter_queue.empty():
-                    try:
-                        images = self.image_queue.get_nowait()
-                        parameters = self.parameter_queue.get_nowait()
+            if self.acquisition_in_progress() and not self.image_queue.empty() and not self.parameter_queue.empty():
+                try:
+                    images = self.image_queue.get_nowait()
+                    parameters = self.parameter_queue.get_nowait()
 
+                    if self.config['acquisition_config']['auto_shots_per_parameter']:
+                        self.shot_counter = parameters['AAAreps']
+                    else:
                         self.shot_counter += 1
-                        self.shot_counter_signal.emit(self.shot_counter)
-                        
-                        logger.info(f"Shot count: {self.shot_counter}")
 
-                        # Emit signal to FileWorker and GUI to buffer data
-                        self.new_data_signal.emit(images, parameters)
+                    # Emit signal to FileWorker and GUI to buffer data
+                    self.new_data_signal.emit(images, parameters)
+
+                    logger.info(f"Shot count: {self.shot_counter}")
+                    
+                    # Determine if we should trigger a save
+                    auto_shots_per_parameter = self.config['acquisition_config']['auto_shots_per_parameter']
+                    shots_per_parameter = self.config['acquisition_config']['shots_per_parameter']
+
+                    auto_save = auto_shots_per_parameter and parameters['AAAreps'] == parameters['n_reps'] - 1
+                    manual_save = self.shot_counter % shots_per_parameter == 0
+                    
+                    if auto_save or manual_save:
+                        self.save_trigger_signal.emit(self.shot_counter)
+                        self.shot_counter = 0
+                        self.rep_counter += 1
+                        self.rep_counter_signal.emit(self.rep_counter)
+                    
+                    self.shot_counter_signal.emit(self.shot_counter)
+
+                    
                         
-                        # Determine if we should trigger a save
-                        auto_shots_per_parameter = self.config.get('acquisition_config', {}).get('auto_shots_per_parameter', False)
-                        shots_per_parameter = self.config.get('acquisition_config', {}).get('shots_per_parameter', 1)
-                        
-                        should_save = False
-                        if auto_shots_per_parameter:
-                            # Auto mode: save when parameter changes (e.g., AAAreps decreases)
-                            curr_shot_number = parameters.get('AAAreps', 0)
-                            if hasattr(self, '_last_shot_number'):
-                                if curr_shot_number < self._last_shot_number:
-                                    should_save = True
-                                    logger.info(f"Parameter changed from {self._last_shot_number} to {curr_shot_number}, triggering save")
-                            self._last_shot_number = curr_shot_number
-                        else:
-                            # Manual mode: save every N shots
-                            if self.shot_counter % shots_per_parameter == 0:
-                                should_save = True
-                                logger.info(f"Reached {shots_per_parameter} shots, triggering save")
-                        
-                        if should_save:
-                            self.save_trigger_signal.emit()
-                            
-                    except multiprocessing.queues.Empty:
-                        # Race condition: one queue became empty between check and get
-                        logger.warning("Race condition: Queue became empty after check")
-                    except Exception as e:
-                        logger.error(f"Error processing images: {e}")
+                except multiprocessing.queues.Empty:
+                    # Race condition: one queue became empty between check and get
+                    logger.warning("Race condition: Queue became empty after check")
+                except Exception as e:
+                    logger.error(f"Error processing images: {e}")
 
 
     def stop(self):
@@ -130,21 +122,24 @@ class Controller(QThread):
         self._running = False  # Stop the run loop
         self.acquisition_teardown_flag.set()
 
+        # Stop FileWorker if running
         if self.file_worker:
             if self.file_worker.isRunning():
+                logger.info("Stopping FileWorker")
                 self.file_worker.stop()
-                self.file_worker.wait()
+                # Don't wait here - let parent thread handle waiting
         
         # Stop ConnectionWorker if running
         if self.connection_worker:
             if self.connection_worker.isRunning():
+                logger.info("Stopping ConnectionWorker")
                 self.connection_worker.quit()
-                self.connection_worker.wait()  # wait for thread to finish
+                # Don't wait here - let parent thread handle waiting
         
         # Signal the Controller's event loop to exit
         # Note: quit() and wait() should be called from the parent thread (MainWindow.closeEvent)
         self.quit()
-        logger.info("Controller stopped")
+        logger.info("Controller stop initiated")
 
     def start_acquisition(self):
         """Start image acquisition"""
@@ -620,8 +615,8 @@ class Controller(QThread):
             friendly_config['Preamp gain'] = camera_friendly_map['Preamp gain'].index(config['Preamp gain'])
         if 'Temperature (C)' in config:
             friendly_config['Temperature (C)'] = float(config['Temperature (C)'])
-        if 'Exposure Time (ms)' in config:
-            friendly_config['Exposure Time (ms)'] = float(config['Exposure Time (ms)'])
+        if 'Exposure time (ms)' in config:
+            friendly_config['Exposure time (ms)'] = float(config['Exposure time (ms)'])
         if 'EM gain' in config:
             friendly_config['EM gain'] = int(config['EM gain'])
         if 'X binning' in config:

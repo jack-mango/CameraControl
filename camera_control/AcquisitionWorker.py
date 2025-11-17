@@ -225,7 +225,7 @@ class AcquisitionWorker(Process):
         
         # Read the oldest frames_per_shot images
         read_range = (first, first + self.frames_per_shot.value)    
-        logger.debug(f"Reading frames {read_range[0]}–{read_range[1]} "
+        logger.info(f"Reading frames {read_range[0]}–{read_range[1]} "
                     f"(out of available {total_unread}, indices {first}–{last})")
 
         images = self.camera.read_multiple_images(rng=read_range)
@@ -252,7 +252,7 @@ class AcquisitionWorker(Process):
         return
     
     def set_exposure(self, exposure):
-        self.camera.set_exposure(exposure)
+        self.camera.set_exposure(exposure / 1000)
         return
     
     def set_trigger_mode(self, mode):
@@ -260,7 +260,8 @@ class AcquisitionWorker(Process):
         return
     
     def set_emccd_gain(self, gain):
-        self.camera.set_EMCCD_gain(gain)
+        high = gain > 300
+        self.camera.set_EMCCD_gain(gain, advanced=high)
         return
     
     def set_high_em_gain(self, high):

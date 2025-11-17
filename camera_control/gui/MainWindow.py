@@ -96,6 +96,8 @@ class MainWindow(QMainWindow):
             self.controller.socket_connection_signal.connect(self.update_socket_connection_indicator)
             self.controller.new_data_signal.connect(self.on_new_image_data)
             self.controller.shot_counter_signal.connect(self.acquisition_panel.update_shot_counter)
+            self.controller.rep_counter_signal.connect(self.acquisition_panel.update_rep_counter)
+            self.controller.rep_counter_signal.connect(self.on_rep_changed)
             
             # Set initial indicator states
             self.update_camera_connection_indicator(self.controller.is_camera_connected)
@@ -111,6 +113,15 @@ class MainWindow(QMainWindow):
             parameters: Dictionary of acquisition parameters
         """
         self.live_image_view_widget.update_image_plots(images)
+    
+    def on_rep_changed(self, rep_count):
+        """
+        Handle repetition counter change - notify all plots to clear their buffers
+        
+        Args:
+            rep_count: New repetition count
+        """
+        self.live_image_view_widget.on_rep_changed(rep_count)
     
     def update_camera_connection_indicator(self, is_connected):
         """Update the camera connection indicator color based on connection status"""
@@ -159,6 +170,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Clean shutdown when window closes"""
+        print("Closing application...")
+        
         # Remove the Qt logging handler before destroying widgets
         try:
             if hasattr(self, 'logging_panel'):
@@ -167,10 +180,30 @@ class MainWindow(QMainWindow):
             print(f"Error cleaning up logging panel: {e}")
         
         if self.controller:
+            print("Stopping controller...")
             self.controller.stop()
-            if not self.controller.wait(5000):  # 5 second timeout
-                print("Warning: Controller did not stop within 5 seconds")
+            
+            # Wait for FileWorker to finish
+            if self.controller.file_worker and self.controller.file_worker.isRunning():
+                print("Waiting for FileWorker...")
+                if not self.controller.file_worker.wait(3000):
+                    print("Warning: FileWorker did not stop, terminating")
+                    self.controller.file_worker.terminate()
+            
+            # Wait for ConnectionWorker to finish
+            if self.controller.connection_worker and self.controller.connection_worker.isRunning():
+                print("Waiting for ConnectionWorker...")
+                if not self.controller.connection_worker.wait(3000):
+                    print("Warning: ConnectionWorker did not stop, terminating")
+                    self.controller.connection_worker.terminate()
+            
+            # Finally wait for Controller itself
+            print("Waiting for Controller...")
+            if not self.controller.wait(3000):
+                print("Warning: Controller did not stop, terminating")
                 self.controller.terminate()
+        
+        print("Application closed")
         event.accept()
 
     def open_camera_config(self):

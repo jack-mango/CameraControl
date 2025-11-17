@@ -17,7 +17,7 @@ from ..constants import COLORS
 
 logger = logging.getLogger(__name__)
 
-# TODO: Should clear the accumulated images buffer when we reach shots_per_parameter
+# TODO: Should clear the accumulated images buffer when we reach shots_per_parameter; don't just set the buffer size once.
 
 # TODO: Add function builder, I think perhaps text input would be best?
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class ImagePlot(QWidget):
     """Individual plot widget for displaying camera images with configurable processing"""
-    def __init__(self, width_px=400, height_px=300, dpi=100, buffer_size=10, plot_number=None, parent=None):
+    def __init__(self, width_px=400, height_px=300, dpi=100, plot_number=None, parent=None):
         super().__init__(parent)
         
         self.setObjectName("image-plot")
@@ -40,7 +40,7 @@ class ImagePlot(QWidget):
         self.processing_function = lambda x: x[0]
         self.image_data = None
         self.accumulated_images = []
-        self.buffer_size = buffer_size
+        self.current_rep = 0  # Track current repetition number
         self.cmin = None
         self.cmax = None
         self.gaussian_blur_enabled = True
@@ -368,24 +368,27 @@ class ImagePlot(QWidget):
         self.processing_function = func
         self.update_display()
     
-    def set_buffer_size(self, buffer_size):
-        """Set the buffer size (called from MainWindow or controller)"""
-        self.buffer_size = buffer_size
-        # Trim accumulated images if buffer got smaller
-        if len(self.accumulated_images) > buffer_size:
-            self.accumulated_images = self.accumulated_images[-buffer_size:]
-    
     def update_image(self, image_data):
         """Update with new image data from camera"""
-        print(image_data.shape)
         self.image_data = image_data
         
-        # Add to accumulated images for averaging
+        # Add to accumulated images - buffer grows until rep changes
         self.accumulated_images.append(image_data)
-        if len(self.accumulated_images) > self.buffer_size:
-            self.accumulated_images.pop(0)
         
         self.update_display()
+    
+    def on_rep_changed(self, rep_count):
+        """
+        Slot called when repetition counter changes.
+        Clears the accumulated buffer to start fresh for new rep.
+        
+        Args:
+            rep_count: New repetition count
+        """
+        if rep_count != self.current_rep:
+            self.current_rep = rep_count
+            self.accumulated_images = []
+            logger.debug(f"Plot {self.plot_number}: Cleared buffer for rep {rep_count}")
     
     def update_display(self):
         """Update the display based on current settings"""
@@ -393,14 +396,24 @@ class ImagePlot(QWidget):
         if display_data is None:
             return
         
+        # Calculate color scale limits
+        if self.auto_scale_checkbox.isChecked():
+            # Auto-scale: use data min/max
+            vmin = np.min(display_data)
+            vmax = np.max(display_data)
+        else:
+            # Manual scale: use user-specified values
+            vmin = self.cmin
+            vmax = self.cmax
+        
         # Update plot
         if self.im is None:
             # First time plotting
-            self.im = self.ax.imshow(display_data, cmap=self.colormap, origin='lower')#, cmap=self.colormap, aspect='auto', vmin=vmin, vmax=vmax)
+            self.im = self.ax.imshow(display_data, cmap=self.colormap, origin='lower', vmin=vmin, vmax=vmax)
         else:
             # Update existing image
             self.im.set_data(display_data)
-            self.im.set_clim(vmin=self.cmin, vmax=self.cmax)
+            self.im.set_clim(vmin=vmin, vmax=vmax)
         
         self.canvas.draw()
     

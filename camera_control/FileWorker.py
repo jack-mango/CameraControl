@@ -102,63 +102,44 @@ class FileWorker(QObject):
         self.parameter_buffer.put(parameters)
         logger.debug(f"Buffered data. Current buffer size: {self.image_buffer.qsize()}")
     
-    def save_buffered_data(self):
+    def save_buffered_data(self, n_shots):
         """
         Slot to trigger saving of buffered data.
-        Called when Controller emits save_trigger_signal.
+        Called when Controller emits save_trigger_signal with number of shots to save.
+        
+        Args:
+            n_shots: Number of shots to pull from buffer and save
         """
         if self.image_buffer.empty():
             logger.warning("No data in buffer to save")
             return
         
         try:
-            # Pull all buffered items
+            # Pull n_shots items from the buffers
             images_list = []
             params_list = []
             
-            while not self.image_buffer.empty():
-                images_list.append(self.image_buffer.get())
-                params_list.append(self.parameter_buffer.get())
+            # Determine how many items to actually pull
+            available_shots = self.image_buffer.qsize()
+            shots_to_save = min(n_shots, available_shots)
             
-            if not images_list:
+            if shots_to_save == 0:
                 logger.warning("No images to save")
                 return
+            
+            logger.info(f"Saving {shots_to_save} shots from buffer (requested: {n_shots}, available: {available_shots})")
+            
+            # Pull the specified number of shots
+            for _ in range(shots_to_save):
+                images_list.append(self.image_buffer.get())
+                params_list.append(self.parameter_buffer.get())
             
             # Use the last parameter set (most recent)
             params = params_list[-1] if params_list else {}
             params['array_axes'] = ('shots_per_parameter', 'frames_per_shot', 'y_pixels', 'x_pixels')
             params['num_shots'] = len(images_list)
             
-            # Stack all buffered images into single array
-            stacked_images = np.stack(images_list, axis=0)
-            
-            # Save to file
-            fname = self._save(stacked_images, params)
-            self.save_complete_signal.emit(fname)
-            logger.info(f"Saved {len(images_list)} shots to {fname}")
-            
-        except Exception as e:
-            error_msg = f"Error saving buffered data: {str(e)}"
-            logger.error(error_msg)
-
-    def _save_buffered_data(self):
-        """Save the buffered images and parameters to file"""
-        if self.image_buffer.empty():
-            logger.warning("No data in buffer to save")
-            return
-        
-        try:
-            # Pull only shots_per_parameter items from the queues
-            images_list = []
-            items_to_pull = min(self.shots_per_parameter, self.image_buffer.qsize())
-
-            
-            for _ in range(items_to_pull):
-                images_list.append(self.image_buffer.get())
-            params = self.parameter_buffer.get()
-            params['array_axes'] = ('shots_per_parameter', 'frames_per_shot', 'y_pixels', 'x_pixels')
-            
-            # Stack all buffered images into single array
+            # Stack all images into single array
             stacked_images = np.stack(images_list, axis=0)
             
             # Save to file
@@ -175,9 +156,10 @@ class FileWorker(QObject):
         logger.info("Stopping FileWorker...")
         
         # Save any remaining buffered data before stopping
-        if not self.image_buffer.empty():
-            logger.info(f"Saving remaining {self.image_buffer.qsize()} shots before stopping")
-            self.save_buffered_data()
+        buffer_size = self.image_buffer.qsize()
+        if buffer_size > 0:
+            logger.info(f"Saving remaining {buffer_size} shots before stopping")
+            self.save_buffered_data(buffer_size)
         
         logger.info("FileWorker stopped")
     

@@ -108,6 +108,14 @@ class AcquisitionPanel(QWidget):
     
     def on_start_clicked(self):
         """Handle start button click"""
+        # Reset counters at the start of acquisition
+        self.shot_count = 0
+        self.rep_count = 0
+        self.tot_shots = 0
+        self.shot_in_rep_label.setText("0")
+        self.rep_number_label.setText("0")
+        self.total_shots_label.setText("0")
+        
         self.controller.start_acquisition()
         # Update button states
         self.start_btn.setEnabled(False)
@@ -140,16 +148,22 @@ class AcquisitionPanel(QWidget):
     
     def update_shot_counter(self, shot_count):
         """
-        Update the total shots counter from Controller's shot_counter_signal.
+        Update the shot counter display from Controller's shot_counter_signal.
         
         Args:
-            shot_count: Current total shot count
+            shot_count: Current shot count in the current repetition
         """
-        prev_shot_count = self.shot_count
         self.shot_count = shot_count
-        self.total_shots_label.setText(str(shot_count))
+        self.shot_in_rep_label.setText(str(shot_count))
         self.tot_shots += 1
         self.total_shots_label.setText(str(self.tot_shots))
-        if prev_shot_count < shot_count:
-            self.rep_count += 1
-            self.rep_number_label.setText(str(self.rep_count))
+    
+    def update_rep_counter(self, rep_count):
+        """
+        Update the rep counter display from Controller's rep_counter_signal.
+        
+        Args:
+            rep_count: Current repetition count
+        """
+        self.rep_count = rep_count
+        self.rep_number_label.setText(str(rep_count))
