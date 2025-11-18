@@ -86,11 +86,11 @@ class Controller(QThread):
                         self.shot_counter = parameters['AAAreps']
                     else:
                         self.shot_counter += 1
+                    
+                    logger.info(f"Shot count: {self.shot_counter}")
 
                     # Emit signal to FileWorker and GUI to buffer data
                     self.new_data_signal.emit(images, parameters)
-
-                    logger.info(f"Shot count: {self.shot_counter}")
                     
                     # Determine if we should trigger a save
                     auto_shots_per_parameter = self.config['acquisition_config']['auto_shots_per_parameter']
@@ -106,13 +106,7 @@ class Controller(QThread):
                         self.rep_counter_signal.emit(self.rep_counter)
                     
                     self.shot_counter_signal.emit(self.shot_counter)
-
-                    # Check for new images and parameters;
-                    # if AAAreps == 0, then that means a new repetition has started. Should try to trigger a save,
-                    # and reset shot counter.
-                    # Then emit the new images and parameters to FileWorker
-
-                    
+                        
                 except multiprocessing.queues.Empty:
                     # Race condition: one queue became empty between check and get
                     logger.warning("Race condition: Queue became empty after check")

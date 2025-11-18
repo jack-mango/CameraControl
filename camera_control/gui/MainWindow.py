@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
             self.controller.new_data_signal.connect(self.on_new_image_data)
             self.controller.shot_counter_signal.connect(self.acquisition_panel.update_shot_counter)
             self.controller.rep_counter_signal.connect(self.acquisition_panel.update_rep_counter)
-            self.controller.rep_counter_signal.connect(self.on_rep_changed)
+            self.controller.rep_counter_signal.connect(self.live_image_view_widget.clear_all_buffers)
             
             # Set initial indicator states
             self.update_camera_connection_indicator(self.controller.is_camera_connected)
@@ -113,15 +113,6 @@ class MainWindow(QMainWindow):
             parameters: Dictionary of acquisition parameters
         """
         self.live_image_view_widget.update_image_plots(images)
-    
-    def on_rep_changed(self, rep_count):
-        """
-        Handle repetition counter change - notify all plots to clear their buffers
-        
-        Args:
-            rep_count: New repetition count
-        """
-        self.live_image_view_widget.on_rep_changed(rep_count)
     
     def update_camera_connection_indicator(self, is_connected):
         """Update the camera connection indicator color based on connection status"""

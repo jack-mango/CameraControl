@@ -228,6 +228,12 @@ class LiveImageViewWidget(QWidget):
             return self.plots[row][col]
         return None
 
+    def clear_all_buffers(self):
+        """Clear the accumulated image buffers in all plots when rep counter changes"""
+        for row in self.plots:
+            for plot in row:
+                plot.clear_buffer()
+
     def update_image_plots(self, images):
         """Update all plots with all camera images
         
@@ -244,15 +250,3 @@ class LiveImageViewWidget(QWidget):
         for row in self.plots:
             for plot in row:
                 plot.update_image(images)
-    
-    def on_rep_changed(self, rep_count):
-        """
-        Notify all plots that the repetition counter changed.
-        Each plot will clear its accumulated buffer.
-        
-        Args:
-            rep_count: New repetition count
-        """
-        for row in self.plots:
-            for plot in row:
-                plot.on_rep_changed(rep_count)

@@ -225,7 +225,7 @@ class AcquisitionWorker(Process):
         
         # Read the oldest frames_per_shot images
         read_range = (first, first + self.frames_per_shot.value)    
-        logger.info(f"Reading frames {read_range[0]}–{read_range[1]} "
+        logger.debug(f"Reading frames {read_range[0]}–{read_range[1]} "
                     f"(out of available {total_unread}, indices {first}–{last})")
 
         images = self.camera.read_multiple_images(rng=read_range)

@@ -40,7 +40,6 @@ class ImagePlot(QWidget):
         self.processing_function = lambda x: x[0]
         self.image_data = None
         self.accumulated_images = []
-        self.current_rep = 0  # Track current repetition number
         self.cmin = None
         self.cmax = None
         self.gaussian_blur_enabled = True
@@ -368,27 +367,19 @@ class ImagePlot(QWidget):
         self.processing_function = func
         self.update_display()
     
+    def clear_buffer(self):
+        """Clear the accumulated images buffer when rep counter changes"""
+        self.accumulated_images = []
+        logger.debug(f"Plot {self.plot_number}: Buffer cleared")
+    
     def update_image(self, image_data):
         """Update with new image data from camera"""
         self.image_data = image_data
         
-        # Add to accumulated images - buffer grows until rep changes
+        # Add to accumulated images buffer (no size limit)
         self.accumulated_images.append(image_data)
         
         self.update_display()
-    
-    def on_rep_changed(self, rep_count):
-        """
-        Slot called when repetition counter changes.
-        Clears the accumulated buffer to start fresh for new rep.
-        
-        Args:
-            rep_count: New repetition count
-        """
-        if rep_count != self.current_rep:
-            self.current_rep = rep_count
-            self.accumulated_images = []
-            logger.debug(f"Plot {self.plot_number}: Cleared buffer for rep {rep_count}")
     
     def update_display(self):
         """Update the display based on current settings"""
