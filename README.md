@@ -6,7 +6,7 @@ A Python-based application for controlling Andor SDK2 cameras with multi-threade
 
 - **Multi-Camera Support**: Search, connect, and control multiple Andor cameras
 - **Real-Time Acquisition**: Multi-process architecture for continuous image capture without blocking
-- **Flexible Data Storage**: Save acquired images in multiple formats (HDF5, NPZ, MAT, TIFF)
+- **Flexible Data Storage**: Save acquired images in multiple formats (HDF5, NPZ, MAT)
 - **Network Integration**: Socket-based parameter communication for synchronized experimental control
 - **Live Monitoring**: Real-time temperature monitoring and camera status updates
 - **Configurable Settings**: Comprehensive control over camera parameters including:
