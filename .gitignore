@@ -19,3 +19,4 @@ tests/**/*.py[cod]
 .pytest_cache/
 
 test.py
+Pipfile.lock

@@ -1,0 +1,17 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pyqt5 = ">=5.15.0"
+pylablib = ">=1.4.0"
+numpy = ">=1.21.0"
+scipy = ">=1.7.0"
+matplotlib = ">=3.4.0"
+h5py = ">=3.6.0"
+
+[dev-packages]
+
+[requires]
+python_version = "3.13"
