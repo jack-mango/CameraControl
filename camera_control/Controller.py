@@ -168,8 +168,23 @@ class Controller(QThread):
     def stop_acquisition(self):
         logger.info("Stopping acquisition...")
         self.acquisition_flag.clear()
+        # Clear the acquisition
         self.stop_file_worker()
         return
+    
+    def clear_queues(self):
+        """Clear image and parameter queues"""
+        logger.info("Clearing image and parameter queues...")
+        while not self.image_queue.empty():
+            try:
+                self.image_queue.get_nowait()
+            except Exception:
+                break
+        while not self.parameter_queue.empty():
+            try:
+                self.parameter_queue.get_nowait()
+            except Exception:
+                break
 
     def acquisition_in_progress(self):
         return self.acquisition_flag.is_set()
