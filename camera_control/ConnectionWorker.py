@@ -50,7 +50,9 @@ class ConnectionWorker(QThread):
                         # Deserialize the pickled dictionary
                         parameters = pickle.loads(data)
                         logger.debug(f"Received parameters from {addr}: {parameters}")
-                        
+                        if parameters["debug_mode"] == True:
+                            logger.info("Debug mode is ON")
+                            continue
                         # Put in queue and emit signal
                         self.parameter_queue.put(parameters)
                     except pickle.UnpicklingError as e:
