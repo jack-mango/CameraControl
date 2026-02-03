@@ -168,6 +168,10 @@ class Controller(QThread):
     def stop_acquisition(self):
         logger.info("Stopping acquisition...")
         self.acquisition_flag.clear()
+        self.clear_queues()
+        self.shot_counter = 0
+        self.shot_number_in_rep = 0
+        self.rep_counter = 0
         # Clear the acquisition
         self.stop_file_worker()
         return
