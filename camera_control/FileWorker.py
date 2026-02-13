@@ -6,14 +6,13 @@ import numpy as np
 from queue import Queue
 from scipy.io import savemat
 from PyQt5.QtCore import QObject, pyqtSignal
-
+import tempfile
+import shutil
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-
-# TODO: If the year month day directories don't exist create them.
 
 class FileWorker(QObject):
     """Worker object for saving image data to files"""
@@ -64,26 +63,31 @@ class FileWorker(QObject):
         Raises:
             Exception: If file saving fails
         """
-        # Determine filename
+        # Determine filename and directory
         if self.use_socket_data_path and 'filename' in params:
             # Use filename from socket parameters
             filename = params.pop('filename')
+            # If socket provides full path, use directory from it
+            file_dir = os.path.dirname(filename) if os.path.dirname(filename) else self.file_path
+            filename_base = os.path.basename(filename)
         else:
             # Create timestamp for filename
             t = time.localtime()
             date_dir = time.strftime("%Y\\%m\\%d\\", t)
             timestamp = time.strftime("%H%M_%S", t)
-            filename = timestamp
-            date_dir_full_path = os.path.join(self.file_path, date_dir)
-            os.makedirs(date_dir_full_path, exist_ok=True)   
+            filename_base = timestamp
+            file_dir = os.path.join(self.file_path, date_dir)
+            
+        # Ensure directory exists
+        os.makedirs(file_dir, exist_ok=True)
         
         # Route to appropriate save method based on format
         if self.file_extension == '.hdf5' or self.file_extension == '.h5':
-            return self._save_hdf5(images, params, filename)
+            return self._save_hdf5(images, params, filename_base, file_dir)
         elif self.file_extension == '.npz':
-            return self._save_npz(images, params, filename)
+            return self._save_npz(images, params, filename_base, file_dir)
         elif self.file_extension == '.mat':
-            return self._save_mat(images, params, filename)
+            return self._save_mat(images, params, filename_base, file_dir)
         else:
             raise ValueError(f"Unsupported file format: {self.file_extension}")
 
@@ -187,12 +191,23 @@ class FileWorker(QObject):
         logger.info(f"Save format changed to: {file_extension}")
     
 
-    def _save_hdf5(self, images, params, filename):
-        """Save images and params to HDF5 file"""
-        fname = os.path.join(self.file_path, f'{filename}.h5')
+    def _save_hdf5(self, images, params, filename, file_dir):
+        """Save images and params to HDF5 file using atomic write"""
+        final_path = os.path.join(file_dir, f'{filename}.h5')
+        
+        # Create temporary file in the SAME directory (crucial for atomic move)
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix='.h5',
+            prefix='.tmp_',
+            dir=file_dir
+        )
         
         try:
-            with h5py.File(fname, "w") as f:
+            # Close the file descriptor - we'll use h5py to write
+            os.close(temp_fd)
+            
+            # Write to temporary file
+            with h5py.File(temp_path, "w") as f:
                 # Save images dataset with compression
                 f.create_dataset("images", data=images, compression="gzip")
 
@@ -203,45 +218,95 @@ class FileWorker(QObject):
                 for key, value in params.items():
                     params_group.attrs[key] = value
             
-            logger.info(f"Successfully saved HDF5 file: {fname}")
-            return fname
+            # Atomic move: rename temp file to final filename
+            # This is instantaneous and prevents Jupyter from seeing incomplete files
+            shutil.move(temp_path, final_path)
+            
+            logger.info(f"Successfully saved HDF5 file: {final_path}")
+            return final_path
+            
         except Exception as e:
-            logger.error(f"Failed to save HDF5 file {fname}: {e}")
+            # Clean up temp file on error
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+            logger.error(f"Failed to save HDF5 file {final_path}: {e}")
             raise
     
-    def _save_npz(self, images, params, filename):
-        """Save images and params to NumPy .npz file"""
-        fname = os.path.join(self.file_path, f'{filename}.npz')
+    def _save_npz(self, images, params, filename, file_dir):
+        """Save images and params to NumPy .npz file using atomic write"""
+        final_path = os.path.join(file_dir, f'{filename}.npz')
+        
+        # Create temporary file in the SAME directory
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix='.npz',
+            prefix='.tmp_',
+            dir=file_dir
+        )
         
         try:
+            # Close the file descriptor
+            os.close(temp_fd)
+            
             # Combine images and params into one dictionary
             save_dict = {'images': images}
             save_dict.update(params)
             
-            # Save compressed
-            np.savez_compressed(fname, **save_dict)
+            # Save compressed to temp file
+            np.savez_compressed(temp_path, **save_dict)
             
-            logger.info(f"Successfully saved NPZ file: {fname}")
-            return fname
+            # Atomic move
+            shutil.move(temp_path, final_path)
+            
+            logger.info(f"Successfully saved NPZ file: {final_path}")
+            return final_path
+            
         except Exception as e:
-            logger.error(f"Failed to save NPZ file {fname}: {e}")
+            # Clean up temp file on error
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+            logger.error(f"Failed to save NPZ file {final_path}: {e}")
             raise
     
-    def _save_mat(self, images, params, filename):
-        """Save images and params to MATLAB .mat file"""
+    def _save_mat(self, images, params, filename, file_dir):
+        """Save images and params to MATLAB .mat file using atomic write"""
+        final_path = os.path.join(file_dir, f'{filename}.mat')
         
-        fname = os.path.join(self.file_path, f'{filename}.mat')
+        # Create temporary file in the SAME directory
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix='.mat',
+            prefix='.tmp_',
+            dir=file_dir
+        )
         
         try:
+            # Close the file descriptor
+            os.close(temp_fd)
+            
             # Combine images and params into one dictionary
             save_dict = {'images': images}
             save_dict.update(params)
             
-            # Save to .mat file
-            savemat(fname, save_dict, do_compression=True)
+            # Save to temp .mat file
+            savemat(temp_path, save_dict, do_compression=True)
             
-            logger.info(f"Successfully saved MAT file: {fname}")
-            return fname
+            # Atomic move
+            shutil.move(temp_path, final_path)
+            
+            logger.info(f"Successfully saved MAT file: {final_path}")
+            return final_path
+            
         except Exception as e:
-            logger.error(f"Failed to save MAT file {fname}: {e}")
+            # Clean up temp file on error
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+            logger.error(f"Failed to save MAT file {final_path}: {e}")
             raise

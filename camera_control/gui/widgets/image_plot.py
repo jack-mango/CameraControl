@@ -133,7 +133,7 @@ class ImagePlot(QWidget):
         # Processing function selection
         self.function_combo = QComboBox()
         self.function_combo.setMinimumWidth(150)
-        self.function_combo.addItems(['x[0]', 'x[1]', 'x[0] - x[1]', 'x[1] - x[0]'])
+        self.function_combo.addItems(['x[0]', 'x[1]', 'x[2]', 'x[0] - x[1]', 'x[1] - x[0]'])
         self.function_combo.currentTextChanged.connect(self.on_function_changed)
         form_layout.addRow("Function:", self.function_combo)
         
@@ -248,6 +248,8 @@ class ImagePlot(QWidget):
             self.processing_function = lambda x: x[0]
         elif function_name == 'x[1]':
             self.processing_function = lambda x: x[1]
+        elif function_name == 'x[2]':
+            self.processing_function = lambda x: x[2]
         elif function_name == 'x[0] - x[1]':
             self.processing_function = lambda x: x[0] - x[1]
         elif function_name == 'x[1] - x[0]':

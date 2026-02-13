@@ -99,13 +99,14 @@ class Controller(QThread):
                     auto_save = auto_shots_per_parameter and parameters['AAAreps'] == parameters['n_reps'] - 1
                     manual_save = self.shot_counter % shots_per_parameter == 0 and not auto_shots_per_parameter
                     
+                    # Emit shot counter signal BEFORE resetting (so the final shot of each rep is counted)
+                    self.shot_counter_signal.emit(self.shot_counter)
+                    
                     if auto_save or manual_save:
                         self.save_trigger_signal.emit(self.shot_counter + 1)
                         self.shot_counter = 0
                         self.rep_counter += 1
                         self.rep_counter_signal.emit(self.rep_counter)
-                    
-                    self.shot_counter_signal.emit(self.shot_counter)
                         
                 except multiprocessing.queues.Empty:
                     # Race condition: one queue became empty between check and get
@@ -142,6 +143,7 @@ class Controller(QThread):
     def start_acquisition(self):
         """Start image acquisition"""
         logger.info("Starting acquisition...")
+        self.clear_queues()
         
         if not self.is_camera_connected:
             raise CameraError("No camera connected!")
@@ -168,8 +170,27 @@ class Controller(QThread):
     def stop_acquisition(self):
         logger.info("Stopping acquisition...")
         self.acquisition_flag.clear()
+        self.clear_queues()
+        self.shot_counter = 0
+        self.shot_number_in_rep = 0
+        self.rep_counter = 0
+        # Clear the acquisition
         self.stop_file_worker()
         return
+    
+    def clear_queues(self):
+        """Clear image and parameter queues"""
+        logger.info("Clearing image and parameter queues...")
+        while not self.image_queue.empty():
+            try:
+                self.image_queue.get_nowait()
+            except Exception:
+                break
+        while not self.parameter_queue.empty():
+            try:
+                self.parameter_queue.get_nowait()
+            except Exception:
+                break
 
     def acquisition_in_progress(self):
         return self.acquisition_flag.is_set()
@@ -233,7 +254,7 @@ class Controller(QThread):
             if not correct_config:
                 self.config['camera_config']['camera_specific_config'] = {}
                 self.config['camera_config']['idx'] = self._camera_idx
-                self.config['camera_config']['serial_number'] = self._camera_info
+                self.config['camera_config']['serial_number'] = self._camera_info['serial_number']
             
             return True
             

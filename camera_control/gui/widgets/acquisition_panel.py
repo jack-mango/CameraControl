@@ -151,12 +151,18 @@ class AcquisitionPanel(QWidget):
         Update the shot counter display from Controller's shot_counter_signal.
         
         Args:
-            shot_count: Current shot count in the current repetition
+            shot_count: Current shot count in the current repetition (0-indexed)
         """
-        self.shot_count = shot_count
-        self.shot_in_rep_label.setText(str(shot_count))
-        self.tot_shots += 1
+        # Get shots per parameter from controller config
+        shots_per_rep = self.controller.config['acquisition_config'].get('shots_per_parameter', 10)
+        
+        # Calculate total shots: rep_count * shots_per_rep + shot_count
+        self.tot_shots = self.rep_count * shots_per_rep + shot_count
         self.total_shots_label.setText(str(self.tot_shots))
+        
+        # Update the display
+        self.shot_in_rep_label.setText(str(shot_count))
+        self.shot_count = shot_count
     
     def update_rep_counter(self, rep_count):
         """

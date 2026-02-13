@@ -18,7 +18,7 @@ class AcquisitionWorker(Process):
                 camera_idx,
                 config_queue,
                 info_queue,
-                data_queue,
+                image_queue,
                 acquisition_flag,
                 teardown_flag,
                 frames_per_shot,
@@ -29,7 +29,7 @@ class AcquisitionWorker(Process):
         self.camera_idx = camera_idx
         self.config_queue = config_queue
         self.info_queue = info_queue
-        self.data_queue = data_queue
+        self.image_queue = image_queue
         self.teardown_flag = teardown_flag
         self.acquisition_flag = acquisition_flag
         self.timeout = timeout
@@ -60,11 +60,11 @@ class AcquisitionWorker(Process):
             elif not self.get_acquisition_flag() and self.acquisition_in_progress():
                 self.camera.stop_acquisition()
             # Only pull images if we have a full n_frames_per_shot taken from the camera.
-            # Then put them onto the data_queue. This corresponds to only taking images after an
+            # Then put them onto the image_queue. This corresponds to only taking images after an
             # experimental shot has completed.
             elif self.get_acquisition_flag() and self.acquisition_in_progress() and self.get_number_of_available_images() >= self.frames_per_shot.value:
                 images = self.pull_images()
-                self.data_queue.put(images)
+                self.image_queue.put(images)
             else:
                 time.sleep(0.1)
         return
